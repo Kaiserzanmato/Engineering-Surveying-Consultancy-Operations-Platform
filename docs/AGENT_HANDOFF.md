@@ -124,3 +124,46 @@ Coordination log for multi-tool agentic engineering (Claude Code, Codex, Antigra
 **Device/browser impact:** N/A.
 
 **Next task:** Unchanged from Entry 3 — Identity/RBAC vertical slice is next.
+
+---
+
+## Entry 5 — 2026-08-09 — Claude Code (Sonnet 5)
+
+**Role:** Builder (Identity/RBAC vertical slice)
+
+**Objective:** Build the first real feature slice per `AGENTS.md` Phase F order: identity/RBAC — schema, Clerk integration, the central `authorize()` function, seeded role/permission catalog, MFA gate, audit logging, minimal UI, and tests.
+
+**Files changed (high level — see git log for the full diff):**
+- `src/db/schema.ts`, `src/db/index.ts`, `drizzle.config.ts`, `drizzle/` — Drizzle schema (users, roles, permissions, role_permissions, user_roles, audit_events) and migration, applied to the `sin1` Neon instance via `scripts/migrate.ts` (not `drizzle-kit push` — no TTY in this environment).
+- `src/proxy.ts` — Clerk middleware, renamed from the legacy `middleware.ts` convention (Next.js 16 renamed the file convention to `proxy.ts`; confirmed by reading `node_modules/next/dist/docs`, per the auto-generated warning in `AGENTS.md`'s Next.js block). Deny-by-default matcher; no public `/sign-up` route (see below).
+- `src/lib/auth/authorize.ts` — the single server-side ALLOW-rule function (`TECHNICAL_ARCHITECTURE.md` §5.3), split into a pure `evaluateAllow()` (unit-tested) and `authorize()`/`can()` wrappers that touch Clerk + DB.
+- `src/lib/auth/mfa.ts` — app-level MFA enforcement for System Administrator (Clerk's Marketplace plan tier doesn't expose per-role MFA policy, so this is enforced in code: redirect to `/account/security` if `twoFactorEnabled` is false).
+- `src/lib/audit.ts` — append-only `audit_events` writer.
+- `src/app/api/webhooks/clerk/route.ts` — syncs Clerk users into the local `users` table on create/update/delete. **Not yet registered with Clerk** — see unresolved risk below.
+- `src/app/dashboard/`, `src/app/admin/users/` — protected dashboard shell and the first real admin UI (list users, assign/revoke roles, suspend/reactivate — suspend also calls Clerk's `banUser`/`unbanUser` to actually revoke sessions, not just flip a local flag).
+- `scripts/seed.ts` — seeds the 9 PRD §12 roles and 3 permission keys (`users:read`, `users:manage_roles`, `users:suspend` — deliberately nothing for unbuilt feature areas).
+- `scripts/bootstrap-admin.ts` — one-time CLI script to grant the first System Administrator (`bun run db:bootstrap-admin -- <email>`), since role assignment normally requires already having `users:manage_roles`.
+- Tests: `src/lib/auth/authorize.test.ts` (11 cases covering the ALLOW rule, including negative cases), `src/db/schema.test.ts` (role catalog + invalid-input rejection). Added `vitest` + config; CI now has a `test` job.
+- Docs: `docs/security/RBAC_MATRIX.md` (new — the required doc per `AGENTS.md` §6), `docs/security/THREAT_MODEL.md` (updated — several rows moved from "planned" to "implemented"), `docs/IMPLEMENTATION_PLAN.md` (P0 checklist mostly checked off, P1 item 1 marked done-for-its-scope).
+
+**Tests:** `bun run test` (11/11 passing), `bunx tsc --noEmit`, `bun run lint`, `bun run build` all clean. Manual smoke test via `bun dev` + curl: homepage renders, `/sign-in` renders, `/dashboard` and `/admin/users` correctly redirect unauthenticated requests to Clerk's hosted sign-in. **Not tested: an actual authenticated user going through sign-in → dashboard → admin/users → role assignment.** That needs a real Clerk sign-in (email/phone verification), which wasn't done in this session — the user should sign in once and confirm the flow works end-to-end.
+
+**Privacy/security impact:**
+- First real enforcement of "deny by default" (`TECHNICAL_ARCHITECTURE.md` §5.3) — `authorize()` is the single gate, used in both the two real protected surfaces (no per-route hand-rolled checks).
+- Suspend now actually revokes Clerk sessions (`banUser`), not just a local DB flag — matches PRD §8 "Suspended account session revocation."
+- Self-suspend and last-admin-removal are both blocked as operational safety rails (not PRD requirements, judgment calls — flagged in `docs/security/RBAC_MATRIX.md`).
+- Clerk's SDK (7.7.1) logged a deprecation warning for `createRouteMatcher` (recommends resource-based checks instead of middleware path-matching). Already mitigated in practice — `authorize()` in each page/layout is the real check, `proxy.ts` is defense-in-depth — but flagged in a code comment and `THREAT_MODEL.md` in case Clerk removes it in a future major version.
+
+**Unresolved risk:**
+- **The Clerk webhook is not registered.** `src/app/api/webhooks/clerk/route.ts` exists and is correct, but nothing calls it yet — `CLERK_WEBHOOK_SIGNING_SECRET` isn't set, and Clerk's dashboard needs a webhook endpoint pointing at the deployed URL (`https://.../api/webhooks/clerk`) with the `user.created`/`user.updated`/`user.deleted` events subscribed. **Until this is done, signing in does NOT create a local `users` row**, which means `getCurrentUser()` returns null for everyone and the whole app is inaccessible past the homepage. This is the single most important next step — bigger than starting the CRM slice.
+- No in-app invite flow (see `docs/security/RBAC_MATRIX.md` known limitations) — first admin bootstrap requires DB access (`bun run db:bootstrap-admin`).
+- Rate limiting still doesn't exist (carried over from Entry 1-4, still P0, still not addressed).
+- `resourceInScope` in `authorize()` is unexercised — no project-scoped resource exists to test it against yet.
+
+**Device/browser impact:** Not tested on real devices/browsers yet — only curl + reading rendered HTML. Layout uses Tailwind with relative/flex sizing, no fixed desktop-only widths, but no actual responsive/accessibility pass (Phase D/L) has been done.
+
+**Next task, in order:**
+1. **Register the Clerk webhook** (dashboard: Webhooks → Add Endpoint → `https://<deployed-url>/api/webhooks/clerk`, subscribe to `user.created`, `user.updated`, `user.deleted`; copy the signing secret into Vercel env vars as `CLERK_WEBHOOK_SIGNING_SECRET` and pull locally with `vercel env pull`).
+2. Sign in once as a real user, confirm the local `users` row appears (webhook working), then run `bun run db:bootstrap-admin -- <your-email>` to become the first System Administrator.
+3. Manually verify the full flow in a browser: dashboard loads, `/admin/users` shows your account, role assignment/suspend work, MFA redirect triggers correctly for a System Administrator without a second factor.
+4. Only after that: start the CRM/Intake slice (P1 item 2).

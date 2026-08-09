@@ -38,18 +38,18 @@ Still open — not blocking P0 scaffolding, but must be resolved before producti
 Priority scheme (per build prompt): P0 Critical/Security/Architecture blocker, P1 Core MVP, P2 Important, P3 Optimization, Tier 4 Future/Parked.
 
 ### P0 — Architecture & security foundation (blocks all feature work)
-- [ ] Confirm architecture/vendor table in §1 with user.
-- [ ] Scaffold Next.js (App Router) + TypeScript project; establish modular-monolith module boundaries per Technical Architecture §3 (18 modules).
-- [ ] Provision managed Postgres + migration tooling.
-- [ ] Provision private object storage with signed short-lived access.
-- [ ] Provision managed auth with RBAC primitives; MFA path for System Administrator.
-- [ ] Implement the authorization pseudo-rule from Technical Architecture §5.3 (`active_user AND permission_granted AND resource_in_scope AND action_allowed`) as a single server-side enforcement point — not per-route ad hoc checks.
-- [ ] CI/CD skeleton: lockfile verification, lint, type check, secret scan, dependency vulnerability scan (Technical Architecture §21).
-- [ ] Environment separation (dev/staging/prod) with separate credentials per PRD §8.
+- [x] Confirm architecture/vendor table in §1 with user.
+- [x] Scaffold Next.js (App Router) + TypeScript project. Modular-monolith module *boundaries* (Technical Architecture §3's 18 modules) are not yet formally established as a directory convention — revisit once 3-4 slices exist and a real pattern is worth codifying, rather than imposing an empty structure now.
+- [x] Provision managed Postgres + migration tooling (Neon, `sin1`, Drizzle + drizzle-kit).
+- [x] Provision private object storage with signed short-lived access (Vercel Blob, `sin1`; signing logic not yet exercised — no file upload feature built yet).
+- [x] Provision managed auth with RBAC primitives; MFA path for System Administrator (Clerk; MFA enforced app-level in `src/lib/auth/mfa.ts`).
+- [x] Implement the authorization pseudo-rule from Technical Architecture §5.3 (`active_user AND permission_granted AND resource_in_scope AND action_allowed`) as a single server-side enforcement point — `src/lib/auth/authorize.ts`.
+- [x] CI/CD skeleton: lockfile verification, lint, type check, secret scan, dependency vulnerability scan, unit tests (Technical Architecture §21).
+- [ ] Environment separation (dev/staging/prod) with separate credentials per PRD §8 — only one environment (development) has been provisioned so far; staging/prod credential separation is not yet set up.
 
 ### P1 — Core MVP (Tier 1 + Tier 2, committed V1 per PRD §4)
 Build in the feature order specified in the build prompt Phase F, each slice carrying its own privacy classification, permission model, tests, and audit logging:
-1. Identity/RBAC (users, roles, permissions, teams, project-level scope)
+1. **Identity/RBAC — done for its own scope (users, roles, permissions, audit log, MFA gate); "teams" and "project-level scope" are explicitly NOT built** — Team has no schema yet (PRD §18 lists it but nothing currently needs it), and project-level scoping has no Project entity to scope against (`resourceInScope` hook exists in `authorize()` but is unexercised — see `docs/security/THREAT_MODEL.md` §5 gap 3). Revisit both when the Projects slice (item 3 below) ships. See `docs/security/RBAC_MATRIX.md` for exactly what's enforced today.
 2. CRM/Intake (leads, qualification, client profile, contacts)
 3. Projects (project record, service type, location, assigned team, status/stage/blocker)
 4. Workflow engine (templates, stages, dependencies, checklists, approval gates — deterministic only, no AI gating per Technical Architecture §14)
