@@ -124,20 +124,20 @@ Per `/TECHNICAL_ARCHITECTURE.md` §11 and `/AGENTS.md` Phase M. Every runtime de
 
 | Field | Value |
 |---|---|
-| Vendor/service | `psgc` (npm, MIT, no deps) — community package bundling the Philippine Statistics Authority's Standard Geographic Code data (region/province/city-municipality/barangay hierarchy, 42,036 barangays). `use-postal-ph` (npm, MIT) — postal codes per municipality. |
+| Vendor/service | `phil-reg-prov-mun-brgy` (npm, MIT, zero runtime deps) — community package bundling a region/province/city-municipality/barangay hierarchy. `use-postal-ph` (npm, MIT) — postal codes per municipality. |
 | Purpose | Real cascading Province -> City/Municipality -> Barangay dropdowns with postal-code auto-fill for `clients.billing*` fields when the Philippines is selected as billing country — see `src/lib/ph-address.ts`, `src/components/address-fields.tsx`. |
 | Data processed | No user/client data sent anywhere — this is static reference data bundled into the app, not an API call. |
-| Region | N/A — client-side static data, lazy-loaded (own ~2.8MB chunk, only fetched when "Philippines" is selected). |
+| Region | N/A — client-side static data, lazy-loaded (own isolated chunk, only fetched when "Philippines" is selected). |
 | Authentication | N/A |
 | Permissions | N/A |
-| SLA | None — not a live service. Risk is data staleness (barangay boundaries/postal codes can change), not availability. |
+| SLA | None — not a live service. Risk is data staleness/gaps (see Status), not availability. |
 | Rate limits | N/A |
-| Security/privacy docs | https://github.com/pcofilada/psgc, https://github.com/blckclov3r/use-postal-ph |
+| Security/privacy docs | https://github.com/wysdom28/phil-reg-prov-mun-brgy, https://github.com/blckclov3r/use-postal-ph |
 | Subprocessors | N/A |
 | Cost | Free |
-| Fallback | If either package is abandoned/inaccurate, the country falls back to the generic free-text city/state/postal fields (same as every other country) — no hard dependency. |
+| Fallback | If a city/barangay isn't listed, `AddressFields` offers a "Can't find your city or barangay? Enter it manually" toggle that switches those two fields to free text — never a hard blocker. If the whole package is abandoned/inaccurate, the country falls back to the generic free-text city/state/postal fields (same as every other country). |
 | Exit/migration plan | Just remove the packages and the PH-specific branch in `AddressFields`; falls back to generic fields automatically. |
-| Status | **Installed 2026-08-09.** Verified against the user's own example before adoption (Cavite -> Kawit -> "Tabon I"/"Tabon II" barangays; Kawit's postal code 4104 matches public record) — not blindly trusted, spot-checked. Data accuracy for the other ~1,600 municipalities not individually verified; flag if a user reports a wrong barangay/postal code so it can be traced to the upstream package. |
+| Status | **Switched from `psgc` to `phil-reg-prov-mun-brgy` on 2026-08-09** after a user bug report ("Kawit works, other locations don't") surfaced that `psgc` returns zero barangays for every actual *city* in Cavite (Bacoor, Cavite City, Dasmariñas, Imus, Tagaytay, Trece Martires) and some municipalities (General Trias) — a real upstream data gap, not an integration bug. Also evaluated and **rejected** `select-philippines-address`: `npm audit` showed a severely outdated `axios` transitive dependency with multiple unfixed high-severity CVEs (SSRF, credential leakage, prototype pollution). `phil-reg-prov-mun-brgy` was verified against the user's own example before adopting (Cavite -> Kawit -> "Tabon I"/"Tabon II" barangays, still holds; Kawit's postal code 4104 matches public record) and via a full coverage sweep: 0 of 1,641 listed cities/municipalities across all 88 provinces return zero barangays. **Known gap:** this package's Cavite city list is missing "Dasmariñas" entirely (21 entries vs. Cavite's real 23 LGUs) — not caught by the coverage sweep since it checks entries that ARE listed, not entries that should exist but aren't. Other individual missing cities elsewhere in the country have not been exhaustively checked. Mitigated via the manual-entry fallback above rather than blocking the user. Flag if a user reports a missing or wrong barangay/postal code so it can be traced to the upstream package. |
 
 ---
 

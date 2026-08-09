@@ -388,3 +388,42 @@ Built `src/lib/countries.ts` (full ISO 3166-1 English short-name list, public st
 **Device/browser impact:** Not yet verified by the user in a real browser. Recommend: pick Philippines as country, confirm Province -> City -> Barangay cascades correctly and postal code auto-fills (try Cavite -> Kawit specifically, matching the original example), then confirm switching back to a non-PH country (e.g. United States) correctly reverts to the free-text State/ZIP fields.
 
 **Next task:** User verification of the PH cascading address flow. Then Projects (P1 item 3), same as prior entries' next-task note.
+
+---
+
+## Entry 13 — 2026-08-09 — Claude Code (Sonnet 5)
+
+**Role:** Builder (CRM slice, fix for a real user-reported data gap in Entry 12's PH address feature)
+
+**Objective:** User tested Entry 12's PH cascading address feature and reported: "Kawit is working but when I tried other locations it isn't working" (screenshot: Cavite -> Imus selected, Barangay dropdown stuck on the placeholder, ZIP blank). Root-caused and fixed.
+
+**Root cause:** Direct inspection of `psgc`'s actual exported data (not assumed from its README) showed it returns **zero barangays for every actual *city* in Cavite** — Bacoor, Cavite City, Dasmariñas, Imus, Tagaytay, Trece Martires — and one municipality, General Trias. Entry 12's spot-check happened to only test Kawit, which is a *municipality*, not a *city*, so this class of gap wasn't caught before shipping. This was psgc's own data gap, not a bug in `ph-address.ts`'s integration code.
+
+**Alternatives evaluated before switching:**
+- `select-philippines-address` — rejected. `npm audit` (run in a scratchpad-only test install, never added to the real project) showed a severely outdated `axios` transitive dependency with multiple unfixed high-severity CVEs (SSRF, credential leakage, prototype pollution, "No fix available").
+- `phil-reg-prov-mun-brgy` (MIT, zero runtime deps) — adopted. Verified directly before switching: Imus now returns 97 real barangays, Kawit still returns 23 including "Tabon I"/"Tabon II" (Entry 12's original example still holds). Ran a full coverage sweep afterward (standalone Node script, not just spot-checks): 0 of 1,641 listed cities/municipalities across all 88 provinces return zero barangays — the class of bug that broke Imus is closed for every entry this package actually lists.
+
+**New gap found by the broadened test suite itself:** this package's Cavite city list is missing "Dasmariñas" entirely (21 entries vs. the real 23 LGUs) — a different failure mode than psgc's (an *absent* entry, not an *empty-barangay* one), so the coverage sweep (which only iterates entries that exist) can't catch it. Rather than treating this as fully solved, added a real mitigation: `AddressFields` now has a "Can't find your city or barangay? Enter it manually" toggle that switches those two fields to free text so a user is never blocked, whether or not other individual cities are missing elsewhere in the country (not exhaustively checked).
+
+**Implementation:**
+- `bun remove psgc && bun add phil-reg-prov-mun-brgy`.
+- `src/lib/ph-address.ts` — rewritten against the new package's API (`getCityMunByProvince`, `getBarangayByMun`), with a `normalizeName()` step to convert its ALL-CAPS, suffix-inconsistent naming ("IMUS CITY", "TRECE MARTIRES CITY (Capital)", "GEN. MARIANO ALVAREZ") into clean Title Case for both display and matching against `use-postal-ph`'s plainer naming. Public function signatures unchanged, so `AddressFields.tsx` needed no changes for the swap itself.
+- `src/types/phil-reg-prov-mun-brgy.d.ts` (new) — the package ships no TypeScript types; a minimal ambient declaration was needed to clear `tsc`'s `TS7016`.
+- `src/lib/ph-address.test.ts` — regression tests for the 5 previously-broken Cavite cities that this package does list, plus a broad sanity check iterating every province/city it returns. Dasmariñas intentionally excluded from the hardcoded regression list with a comment explaining why (it's a known absent-entry gap, not the empty-barangay bug the test exists to catch).
+- `src/components/address-fields.tsx` — added the manual-entry fallback described above.
+- `docs/integrations/DEPENDENCY_REGISTRY.md` — updated the PH geo/postal row: new package, the `select-philippines-address` CVE rejection, and the disclosed Dasmariñas gap.
+
+**Files changed:** `src/lib/ph-address.ts`, `src/lib/ph-address.test.ts`, `src/types/phil-reg-prov-mun-brgy.d.ts` (new), `src/components/address-fields.tsx`, `package.json`/`bun.lock` (removed `psgc`, added `phil-reg-prov-mun-brgy`), `docs/integrations/DEPENDENCY_REGISTRY.md`.
+
+**Tests:** `bun run lint`, `bunx next typegen && bunx tsc --noEmit`, `bun run test` (46/46), `rm -rf .next && bun run build` — all clean.
+
+**Privacy/security impact:** None new — same as Entry 12 (static reference data, no new external calls). The manual-entry fallback doesn't loosen server-side validation; `billingCity`/`billingSubLocality` were always plain text columns regardless of whether the UI presented a dropdown or a text input.
+
+**Unresolved risk / known limitations:**
+- Dasmariñas, Cavite is confirmed absent from this dataset's city list; other individual missing cities elsewhere in the country are possible but not exhaustively checked. Mitigated via the manual-entry toggle rather than left as a silent dead end.
+- Same postal-code-is-per-municipality caveat as Entry 12 (a few large cities have district-level codes the auto-fill won't capture; field stays editable).
+- Global "similar practice" for non-PH countries remains explicitly deferred (Entry 12's scoping decision, unchanged).
+
+**Device/browser impact:** Not yet re-verified by the user in a real browser. Recommend: retry the exact case from their bug report (Cavite -> Imus, confirm barangays now populate and ZIP auto-fills to 4103), then try Cavite -> Dasmariñas specifically to confirm it's absent from the dropdown but the manual-entry toggle lets them enter it anyway.
+
+**Next task:** User verification of this fix (especially the originally-reported Imus case). Then Projects (P1 item 3), same as prior entries' next-task note.

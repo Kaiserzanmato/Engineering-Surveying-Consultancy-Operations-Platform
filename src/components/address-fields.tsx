@@ -43,6 +43,10 @@ export function AddressFields({ defaultValues = {} }: { defaultValues?: AddressD
   const [municipality, setMunicipality] = useState(defaultValues.city ?? "");
   const [barangay, setBarangay] = useState(defaultValues.subLocality ?? "");
   const [postalCode, setPostalCode] = useState(defaultValues.postalCode ?? "");
+  // The cascading dataset doesn't list every LGU (e.g. Dasmariñas City is
+  // absent, see src/lib/ph-address.ts) — this lets a user type it in
+  // instead of getting stuck with no matching dropdown option.
+  const [manualCityEntry, setManualCityEntry] = useState(false);
 
   useEffect(() => {
     if (!isPH || phModule) return;
@@ -140,42 +144,80 @@ export function AddressFields({ defaultValues = {} }: { defaultValues?: AddressD
               ))}
             </select>
           </label>
+          {manualCityEntry ? (
+            <>
+              <label className="flex flex-col gap-1">
+                City / Municipality
+                <input
+                  name="billingCity"
+                  value={municipality}
+                  onChange={(e) => setMunicipality(e.target.value)}
+                  className="rounded border border-black/20 px-2 py-1"
+                />
+              </label>
+              <label className="flex flex-col gap-1">
+                {labels.subLocalityLabel}
+                <input
+                  name="billingSubLocality"
+                  value={barangay}
+                  onChange={(e) => setBarangay(e.target.value)}
+                  className="rounded border border-black/20 px-2 py-1"
+                />
+              </label>
+            </>
+          ) : (
+            <>
+              <label className="flex flex-col gap-1">
+                City / Municipality
+                <select
+                  name="billingCity"
+                  value={municipality}
+                  onChange={(e) => handleMunicipalityChange(e.target.value)}
+                  disabled={!province}
+                  className="rounded border border-black/20 px-2 py-1"
+                >
+                  <option value="">— select city/municipality —</option>
+                  {municipalityOptions.map((m) => (
+                    <option key={m} value={m}>
+                      {m}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex flex-col gap-1">
+                {labels.subLocalityLabel}
+                <select
+                  name="billingSubLocality"
+                  value={barangay}
+                  onChange={(e) => setBarangay(e.target.value)}
+                  disabled={!municipality}
+                  className="rounded border border-black/20 px-2 py-1"
+                >
+                  <option value="">— select barangay —</option>
+                  {barangayOptions.map((b) => (
+                    <option key={b} value={b}>
+                      {b}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </>
+          )}
+          <button
+            type="button"
+            onClick={() => {
+              setManualCityEntry((prev) => !prev);
+              setMunicipality("");
+              setBarangay("");
+            }}
+            className="col-span-2 self-start text-left text-sm text-blue-700 underline"
+          >
+            {manualCityEntry
+              ? "Choose from list instead"
+              : "Can't find your city or barangay? Enter it manually"}
+          </button>
           <label className="flex flex-col gap-1">
-            City / Municipality
-            <select
-              name="billingCity"
-              value={municipality}
-              onChange={(e) => handleMunicipalityChange(e.target.value)}
-              disabled={!province}
-              className="rounded border border-black/20 px-2 py-1"
-            >
-              <option value="">— select city/municipality —</option>
-              {municipalityOptions.map((m) => (
-                <option key={m} value={m}>
-                  {m}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="flex flex-col gap-1">
-            {labels.subLocalityLabel}
-            <select
-              name="billingSubLocality"
-              value={barangay}
-              onChange={(e) => setBarangay(e.target.value)}
-              disabled={!municipality}
-              className="rounded border border-black/20 px-2 py-1"
-            >
-              <option value="">— select barangay —</option>
-              {barangayOptions.map((b) => (
-                <option key={b} value={b}>
-                  {b}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="flex flex-col gap-1">
-            {labels.postalLabel} (auto-filled, editable)
+            {labels.postalLabel} (auto-filled when available, editable)
             <input
               name="billingPostalCode"
               value={postalCode}
