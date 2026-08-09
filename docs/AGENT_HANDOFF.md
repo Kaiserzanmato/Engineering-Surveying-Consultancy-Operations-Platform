@@ -283,3 +283,37 @@ Coordination log for multi-tool agentic engineering (Claude Code, Codex, Antigra
 **Device/browser impact:** Not yet manually verified in a real browser (unlike identity/RBAC, which the user walked through end-to-end). Dev-server curl smoke tests only. Recommend the user click through `/crm/leads` → create a lead → qualify → convert → `/crm/clients` at least once before considering this slice fully verified, the same way identity/RBAC was.
 
 **Next task:** User verification of the CRM flow in a real browser. After that, per `docs/IMPLEMENTATION_PLAN.md` §2, Projects (P1 item 3) is next — and is the slice that will finally give the `resourceInScope` mechanism a second, project-membership-shaped case to prove itself against.
+
+---
+
+## Entry 10 — 2026-08-09 — Claude Code (Sonnet 5)
+
+**Role:** Builder (CRM slice, user-driven fixes from real browser testing)
+
+**Objective:** User actually tested the CRM flow in production (the "next task" from Entry 9) and reported two issues.
+
+**Fix 1 — lead source as free text.** User asked for a dropdown instead of a text input for "Source." Converted `leads.source` from `text` to a new `lead_source` Postgres enum (referral/website/phone/walk_in/social_media/email/event/other) — a generic CRM concept, not Point-View-specific data, so unlike `service_types` a small closed enum was proportionate rather than another admin-managed table. Three live test leads already had `source = "Referral"` (free-text, capitalized) — checked live data before writing the migration, then hand-edited drizzle-kit's generated SQL to normalize case (and bucket anything unrecognized into "other") before the type change, since a direct cast would have failed on the mismatch. Added `parseLeadSource()` validator + tests.
+
+**Fix 2 — "buttons not working" (the significant one).** User reported clicking Save/status buttons on `/crm/leads/[id]` did nothing visible. Investigation:
+1. Checked the audit log directly — mutations WERE succeeding. ~20 `lead.updated`/`lead.reassigned` events in under 7 minutes, several pairs 1-4 seconds apart, meaning the user was clicking repeatedly because the page never visibly confirmed success, not because the save was failing.
+2. User's browser console showed `Failed to load resource: 404` for `leads?_rsc=...`, `/admin/users?_rsc=...`, `/crm/clients?_rsc=...` — these are Next.js's own background RSC fetches (post-Server-Action page refresh, `<Link>` prefetch), not the mutation itself.
+3. First hypothesis (wrong, but harmless): thought this was a Vercel edge-cache artifact from my own earlier unauthenticated curl testing polluting the CDN cache. Ran `vercel cache purge --type cdn`. Didn't fix it — the `age`/`etag` I was reading turned out to just reflect the static `/404` page's build time, not a per-request cache entry. No harm done, but the diagnosis was wrong and I should have realized sooner that my own curl tests are never authenticated, so they can't reproduce a signed-in user's issue.
+4. Real root cause: Clerk's development instance (no production domain configured — see `docs/integrations/DEPENDENCY_REGISTRY.md`) needs a "dev browser" cookie handshake for `auth.protect()` to recognize a session. Top-level page navigations get this automatically; same-origin `fetch()`-based RSC requests (exactly what breaks here) don't reliably get it. `auth.protect()` in `src/proxy.ts` was rewriting those to a static 404 even for Oliver's fully signed-in session.
+5. Fix: removed `auth.protect()`/`createRouteMatcher` from `src/proxy.ts` entirely, keeping bare `clerkMiddleware()` for the request context `auth()`/`currentUser()` need. This is not a security downgrade — `authorize()` in every protected layout/page/action was already the real, sole-source-of-truth enforcement (this file was explicitly documented as "defense-in-depth, not the sole gate" since the identity/RBAC slice), and it matches Clerk's own deprecation guidance to move off `createRouteMatcher` toward resource-based checks. Verified locally and in production: unauthenticated requests to `/dashboard`, `/admin/users`, `/crm/leads` still correctly redirect (now via the `(app)` layout's `getCurrentUser()` check rather than middleware); the previously-404ing RSC-shaped request now returns 200.
+
+**Files changed:**
+- `src/db/schema.ts`, `scripts/seed.ts` (unaffected by source-enum, no permission changes needed), `drizzle/0002_flaky_donald_blake.sql` (hand-edited — see Fix 1), `src/lib/crm/leads.ts` (+`LeadSource` type, `LEAD_SOURCE_LABELS`, `parseLeadSource`), `src/lib/crm/leads.test.ts` (+3 tests), `src/app/(app)/crm/leads/actions.ts`, `src/app/(app)/crm/leads/page.tsx`, `src/app/(app)/crm/leads/[id]/page.tsx` (select instead of input for source).
+- `src/proxy.ts` — rewritten, see Fix 2.
+- `docs/security/THREAT_MODEL.md` — Broken access control row updated (single enforcement layer now, not defense-in-depth-over-middleware), new gap 7 documenting the change and why a future production Clerk instance could safely reintroduce middleware protection.
+
+**Tests:** `bun run test` (28/28), `bunx tsc --noEmit`, `bun run lint`, `bun run build` all clean before each deploy. Verified live in production after each fix (curl with real navigation vs. RSC-prefetch headers; audit log inspection; user's own browser for the button behavior).
+
+**Privacy/security impact:** Fix 2 removes a redundant enforcement layer but does not reduce actual protection — confirmed by testing that unauthenticated access is still denied via the remaining layer. Flagged as a real (if narrow) risk in THREAT_MODEL.md gap 7: a future page that forgets to call `authorize()` now has no middleware fallback to catch it. Code review discipline matters more now than it did with the (buggy) belt-and-suspenders middleware in place.
+
+**Unresolved risk:**
+- The underlying Clerk dev-instance limitation (no production domain) still exists — this fix works around its consequence for RSC fetches specifically, but doesn't resolve the root cause. User confirmed no domain is available yet for a full Clerk production migration; that's deferred as a separate, deliberate task (needs domain acquisition + DNS + new OAuth credentials + re-registering the webhook against a new production signing secret).
+- Everything carried over from Entry 9 unchanged.
+
+**Device/browser impact:** This entry's fixes were driven BY real browser testing (the user's), which is exactly the verification step Entry 9 was waiting on. Confirmed working in their actual browser session after Fix 2 deployed — pending their explicit re-confirmation message, but the technical verification (curl RSC-shape test returning 200, audit log showing continued correct behavior) is solid.
+
+**Next task:** User re-verifies buttons now work without needing manual refresh. Then, whenever ready: Projects (P1 item 3), and separately, a deliberate decision on the Clerk production-domain migration (needs: a domain, Google OAuth production credentials, new webhook registration) — not urgent, but real, and now doubly motivated since it would also let middleware-level `auth.protect()` be safely reintroduced.
