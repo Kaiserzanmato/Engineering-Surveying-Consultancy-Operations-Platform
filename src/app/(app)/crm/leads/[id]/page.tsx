@@ -3,8 +3,8 @@ import Link from "next/link";
 import { eq } from "drizzle-orm";
 import { authorize, AuthorizationError, getCurrentUser } from "@/lib/auth/authorize";
 import { getDb } from "@/db";
-import { leads, users, serviceTypes } from "@/db/schema";
-import { leadInScope, hasUnscopedLeadAccess } from "@/lib/crm/leads";
+import { leads, users, serviceTypes, leadSourceEnum } from "@/db/schema";
+import { leadInScope, hasUnscopedLeadAccess, LEAD_SOURCE_LABELS } from "@/lib/crm/leads";
 import {
   updateLeadDetails,
   changeLeadStatus,
@@ -186,11 +186,18 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
           </label>
           <label className="flex flex-col gap-1">
             Source
-            <input
+            <select
               name="source"
               defaultValue={lead.source ?? ""}
               className="rounded border border-black/20 px-2 py-1"
-            />
+            >
+              <option value="">— none —</option>
+              {leadSourceEnum.enumValues.map((s) => (
+                <option key={s} value={s}>
+                  {LEAD_SOURCE_LABELS[s]}
+                </option>
+              ))}
+            </select>
           </label>
           <label className="col-span-2 flex flex-col gap-1">
             Location

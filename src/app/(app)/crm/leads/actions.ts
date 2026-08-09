@@ -11,6 +11,7 @@ import {
   leadInScope,
   hasUnscopedLeadAccess,
   canTransitionLeadStatus,
+  parseLeadSource,
   type LeadStatus,
 } from "@/lib/crm/leads";
 
@@ -40,7 +41,7 @@ export async function createLead(formData: FormData) {
       serviceTypeId,
       serviceRequestNotes: String(formData.get("serviceRequestNotes") ?? "").trim() || null,
       location: String(formData.get("location") ?? "").trim() || null,
-      source: String(formData.get("source") ?? "").trim() || null,
+      source: parseLeadSource(formData.get("source")),
       // Scoped roles (administrative_staff) self-assign on create — see
       // src/lib/crm/leads.ts. Unscoped roles leave it unassigned until
       // someone claims/is assigned it.
@@ -78,7 +79,7 @@ export async function updateLeadDetails(formData: FormData) {
     serviceTypeId,
     serviceRequestNotes: String(formData.get("serviceRequestNotes") ?? "").trim() || null,
     location: String(formData.get("location") ?? "").trim() || null,
-    source: String(formData.get("source") ?? "").trim() || null,
+    source: parseLeadSource(formData.get("source")),
     qualificationNotes: String(formData.get("qualificationNotes") ?? "").trim() || null,
     updatedAt: new Date(),
   };

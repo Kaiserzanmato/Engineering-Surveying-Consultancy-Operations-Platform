@@ -153,6 +153,20 @@ export const leadStatusEnum = pgEnum("lead_status", [
   "converted",
 ]);
 
+// Fixed, standard CRM lead-source categories — unlike serviceTypes, this
+// isn't Point-View-specific business data, so a small closed enum (rather
+// than another admin-managed lookup table) is proportionate here.
+export const leadSourceEnum = pgEnum("lead_source", [
+  "referral",
+  "website",
+  "phone",
+  "walk_in",
+  "social_media",
+  "email",
+  "event",
+  "other",
+]);
+
 export const leads = pgTable("leads", {
   id: uuid("id").primaryKey().defaultRandom(),
   companyName: text("company_name"),
@@ -164,7 +178,7 @@ export const leads = pgTable("leads", {
   }),
   serviceRequestNotes: text("service_request_notes"),
   location: text("location"),
-  source: text("source"),
+  source: leadSourceEnum("source"),
   status: leadStatusEnum("status").notNull().default("new"),
   qualificationNotes: text("qualification_notes"),
   assignedTo: text("assigned_to").references(() => users.id, { onDelete: "set null" }),

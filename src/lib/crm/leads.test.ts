@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { hasUnscopedLeadAccess, leadInScope, canTransitionLeadStatus } from "./leads";
+import { hasUnscopedLeadAccess, leadInScope, canTransitionLeadStatus, parseLeadSource } from "./leads";
 import type { AuthorizedUser } from "@/lib/auth/authorize";
 
 function makeUser(overrides: Partial<AuthorizedUser> = {}): AuthorizedUser {
@@ -93,5 +93,24 @@ describe("canTransitionLeadStatus", () => {
   it("denies a no-op transition to the same status", () => {
     expect(canTransitionLeadStatus("new", "new")).toBe(false);
     expect(canTransitionLeadStatus("qualified", "qualified")).toBe(false);
+  });
+});
+
+describe("parseLeadSource", () => {
+  it("returns null for an empty/missing value (the '— none —' option)", () => {
+    expect(parseLeadSource(null)).toBeNull();
+    expect(parseLeadSource("")).toBeNull();
+    expect(parseLeadSource("   ")).toBeNull();
+  });
+
+  it("accepts every value in the fixed source list", () => {
+    for (const source of ["referral", "website", "phone", "walk_in", "social_media", "email", "event", "other"]) {
+      expect(parseLeadSource(source)).toBe(source);
+    }
+  });
+
+  it("rejects a value outside the fixed list", () => {
+    expect(() => parseLeadSource("Referral")).toThrow(); // wrong case is rejected, not silently coerced
+    expect(() => parseLeadSource("carrier pigeon")).toThrow();
   });
 });

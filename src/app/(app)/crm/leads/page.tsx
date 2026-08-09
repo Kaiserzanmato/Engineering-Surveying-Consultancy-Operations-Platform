@@ -2,9 +2,9 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { authorize, AuthorizationError, getCurrentUser } from "@/lib/auth/authorize";
 import { getDb } from "@/db";
-import { leads, users, serviceTypes } from "@/db/schema";
+import { leads, users, serviceTypes, leadSourceEnum } from "@/db/schema";
 import { eq, desc } from "drizzle-orm";
-import { hasUnscopedLeadAccess } from "@/lib/crm/leads";
+import { hasUnscopedLeadAccess, LEAD_SOURCE_LABELS } from "@/lib/crm/leads";
 import { createLead } from "./actions";
 
 export default async function LeadsPage() {
@@ -85,11 +85,14 @@ export default async function LeadsPage() {
             </label>
             <label className="flex flex-col gap-1">
               Source
-              <input
-                name="source"
-                placeholder="referral, website, phone..."
-                className="rounded border border-black/20 px-2 py-1"
-              />
+              <select name="source" className="rounded border border-black/20 px-2 py-1">
+                <option value="">— none —</option>
+                {leadSourceEnum.enumValues.map((s) => (
+                  <option key={s} value={s}>
+                    {LEAD_SOURCE_LABELS[s]}
+                  </option>
+                ))}
+              </select>
             </label>
             <label className="col-span-2 flex flex-col gap-1">
               Location

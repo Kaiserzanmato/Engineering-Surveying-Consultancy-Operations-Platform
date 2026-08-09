@@ -1,7 +1,29 @@
 import type { AuthorizedUser } from "@/lib/auth/authorize";
-import type { leads, leadStatusEnum } from "@/db/schema";
+import type { leads, leadStatusEnum, leadSourceEnum } from "@/db/schema";
 
 export type LeadStatus = (typeof leadStatusEnum.enumValues)[number];
+export type LeadSource = (typeof leadSourceEnum.enumValues)[number];
+
+export const LEAD_SOURCE_LABELS: Record<LeadSource, string> = {
+  referral: "Referral",
+  website: "Website",
+  phone: "Phone",
+  walk_in: "Walk-in",
+  social_media: "Social media",
+  email: "Email",
+  event: "Event",
+  other: "Other",
+};
+
+const LEAD_SOURCE_VALUES = new Set<string>(Object.keys(LEAD_SOURCE_LABELS));
+
+/** Parses a form field into a validated LeadSource, or null for "— none —". */
+export function parseLeadSource(value: FormDataEntryValue | null): LeadSource | null {
+  const str = String(value ?? "").trim();
+  if (!str) return null;
+  if (!LEAD_SOURCE_VALUES.has(str)) throw new Error(`Invalid lead source: ${str}`);
+  return str as LeadSource;
+}
 
 // Pulled out of the "use server" actions file so it's a plain, unit-testable
 // function — Next.js Server Action files may only export async functions,
