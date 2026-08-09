@@ -50,6 +50,8 @@ jobs:
         with:
           bun-version: latest
       - run: bun install --frozen-lockfile
+      - name: Generate Next.js route types
+        run: bunx next typegen
       - run: bunx tsc --noEmit
 
   build:
