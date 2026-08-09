@@ -200,7 +200,18 @@ export const clients = pgTable("clients", {
   id: uuid("id").primaryKey().defaultRandom(),
   name: text("name").notNull(),
   clientType: clientTypeEnum("client_type").notNull(),
-  billingAddress: text("billing_address"),
+  // Structured, country-adaptive billing address — see src/lib/address.ts
+  // for the per-country label logic. billingCountry is an ISO 3166-1
+  // alpha-2 code (src/lib/countries.ts), not a free-text country name.
+  // billingSubLocality covers fields like PH's "barangay" that only some
+  // countries' addresses use.
+  billingLine1: text("billing_line1"),
+  billingLine2: text("billing_line2"),
+  billingSubLocality: text("billing_sub_locality"),
+  billingCity: text("billing_city"),
+  billingStateProvince: text("billing_state_province"),
+  billingPostalCode: text("billing_postal_code"),
+  billingCountry: text("billing_country"),
   status: clientStatusEnum("status").notNull().default("active"),
   sourceLeadId: uuid("source_lead_id").references(() => leads.id, { onDelete: "set null" }),
   createdBy: text("created_by")

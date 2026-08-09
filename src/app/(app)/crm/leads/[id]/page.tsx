@@ -12,6 +12,7 @@ import {
   assignLead,
   convertLeadToClient,
 } from "../actions";
+import { SubmitButton } from "@/components/submit-button";
 
 const NEXT_STATUS: Record<string, { value: string; label: string }[]> = {
   new: [
@@ -77,23 +78,17 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
             <form key={t.value} action={changeLeadStatus}>
               <input type="hidden" name="leadId" value={lead.id} />
               <input type="hidden" name="status" value={t.value} />
-              <button
-                type="submit"
-                className="rounded border border-black/20 px-3 py-1.5 text-sm hover:bg-black/5"
-              >
+              <SubmitButton className="rounded border border-black/20 px-3 py-1.5 text-sm hover:bg-black/5 disabled:opacity-50">
                 {t.label}
-              </button>
+              </SubmitButton>
             </form>
           ))}
           {!lead.assignedTo && (
             <form action={claimLead}>
               <input type="hidden" name="leadId" value={lead.id} />
-              <button
-                type="submit"
-                className="rounded border border-black/20 px-3 py-1.5 text-sm hover:bg-black/5"
-              >
+              <SubmitButton className="rounded border border-black/20 px-3 py-1.5 text-sm hover:bg-black/5 disabled:opacity-50">
                 Claim this lead
-              </button>
+              </SubmitButton>
             </form>
           )}
           {canConvert && (
@@ -103,12 +98,9 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
                 <option value="company">Company</option>
                 <option value="individual">Individual</option>
               </select>
-              <button
-                type="submit"
-                className="rounded bg-black px-3 py-1.5 text-sm text-white hover:bg-black/80"
-              >
+              <SubmitButton className="rounded bg-black px-3 py-1.5 text-sm text-white hover:bg-black/80 disabled:opacity-50">
                 Convert to client
-              </button>
+              </SubmitButton>
             </form>
           )}
         </section>
@@ -126,9 +118,9 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
               </option>
             ))}
           </select>
-          <button type="submit" className="rounded border border-black/20 px-2 py-1 hover:bg-black/5">
+          <SubmitButton className="rounded border border-black/20 px-2 py-1 hover:bg-black/5 disabled:opacity-50">
             Save
-          </button>
+          </SubmitButton>
         </form>
       )}
 
@@ -225,12 +217,9 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
               className="rounded border border-black/20 px-2 py-1"
             />
           </label>
-          <button
-            type="submit"
-            className="col-span-2 mt-2 w-fit rounded bg-black px-3 py-1.5 text-white hover:bg-black/80"
-          >
+          <SubmitButton className="col-span-2 mt-2 w-fit rounded bg-black px-3 py-1.5 text-white hover:bg-black/80 disabled:opacity-50">
             Save changes
-          </button>
+          </SubmitButton>
         </form>
       )}
 

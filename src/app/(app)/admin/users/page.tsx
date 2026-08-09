@@ -3,6 +3,7 @@ import { authorize, AuthorizationError, getCurrentUser } from "@/lib/auth/author
 import { getDb } from "@/db";
 import { users, userRoles, roles } from "@/db/schema";
 import { assignRole, revokeRole, setUserStatus } from "./actions";
+import { SubmitButton } from "@/components/submit-button";
 
 export default async function AdminUsersPage() {
   try {
@@ -78,13 +79,12 @@ export default async function AdminUsersPage() {
                           <form action={revokeRole}>
                             <input type="hidden" name="userId" value={u.id} />
                             <input type="hidden" name="roleSlug" value={slug} />
-                            <button
-                              type="submit"
-                              className="text-black/50 hover:text-black"
+                            <SubmitButton
+                              className="text-black/50 hover:text-black disabled:opacity-50"
                               aria-label={`Remove ${roleName.get(slug) ?? slug} from ${u.email}`}
                             >
                               ×
-                            </button>
+                            </SubmitButton>
                           </form>
                         )}
                       </li>
@@ -107,12 +107,9 @@ export default async function AdminUsersPage() {
                           </option>
                         ))}
                       </select>
-                      <button
-                        type="submit"
-                        className="rounded bg-black px-2 py-1 text-white hover:bg-black/80"
-                      >
+                      <SubmitButton className="rounded bg-black px-2 py-1 text-white hover:bg-black/80 disabled:opacity-50">
                         Assign
-                      </button>
+                      </SubmitButton>
                     </form>
                   )}
                 </td>
@@ -126,12 +123,9 @@ export default async function AdminUsersPage() {
                         name="status"
                         value={u.status === "active" ? "suspended" : "active"}
                       />
-                      <button
-                        type="submit"
-                        className="rounded border border-black/20 px-2 py-1 hover:bg-black/5"
-                      >
+                      <SubmitButton className="rounded border border-black/20 px-2 py-1 hover:bg-black/5 disabled:opacity-50">
                         {u.status === "active" ? "Suspend" : "Reactivate"}
-                      </button>
+                      </SubmitButton>
                     </form>
                   )}
                 </td>

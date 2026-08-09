@@ -3,6 +3,7 @@ import { authorize, AuthorizationError } from "@/lib/auth/authorize";
 import { getDb } from "@/db";
 import { serviceTypes } from "@/db/schema";
 import { createServiceType } from "./actions";
+import { SubmitButton } from "@/components/submit-button";
 
 export default async function ServiceTypesPage() {
   try {
@@ -45,12 +46,9 @@ export default async function ServiceTypesPage() {
           Description
           <input name="description" className="rounded border border-black/20 px-2 py-1" />
         </label>
-        <button
-          type="submit"
-          className="rounded bg-black px-3 py-1.5 text-white hover:bg-black/80"
-        >
+        <SubmitButton className="rounded bg-black px-3 py-1.5 text-white hover:bg-black/80 disabled:opacity-50">
           Add
-        </button>
+        </SubmitButton>
       </form>
     </div>
   );

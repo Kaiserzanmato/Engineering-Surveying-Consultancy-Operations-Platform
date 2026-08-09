@@ -111,6 +111,13 @@ export async function changeLeadStatus(formData: FormData) {
     resourceInScope: (user) => leadInScope(before, user),
   });
 
+  // A double-click (or a slow first request the user retried) can submit
+  // the same target status twice — the end state the user wanted is
+  // already true, so treat it as a successful no-op rather than an error.
+  // canTransitionLeadStatus() still rejects genuinely invalid transitions
+  // (e.g. new -> converted directly).
+  if (before.status === nextStatus) return;
+
   if (!canTransitionLeadStatus(before.status, nextStatus)) {
     throw new Error(`Cannot move a lead from "${before.status}" to "${nextStatus}"`);
   }
@@ -142,7 +149,8 @@ export async function claimLead(formData: FormData) {
   // Claiming is how a scoped (administrative_staff) user picks up an
   // unassigned lead — not gated by leadInScope since an unassigned lead is
   // by definition not yet in anyone's scope.
-  if (before.assignedTo) throw new Error("This lead is already assigned");
+  if (before.assignedTo === actor.id) return; // double-click: already claimed by this user, no-op
+  if (before.assignedTo) throw new Error("This lead is already assigned to someone else");
 
   const db = getDb();
   await db.update(leads).set({ assignedTo: actor.id, updatedAt: new Date() }).where(eq(leads.id, leadId));
@@ -202,6 +210,13 @@ export async function convertLeadToClient(formData: FormData) {
     resourceInScope: (user) => leadInScope(before, user),
   });
   await authorize("clients:manage");
+
+  // Double-click: already converted (by this same click racing itself, or
+  // a retried request after a slow-but-successful first one) — redirect to
+  // the client that was already created instead of erroring.
+  if (before.status === "converted" && before.convertedClientId) {
+    redirect(`/crm/clients/${before.convertedClientId}`);
+  }
 
   if (before.status !== "qualified") {
     throw new Error('Only a "qualified" lead can be converted to a client');

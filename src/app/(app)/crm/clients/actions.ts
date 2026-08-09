@@ -7,6 +7,7 @@ import { authorize } from "@/lib/auth/authorize";
 import { getDb } from "@/db";
 import { clients, contacts } from "@/db/schema";
 import { logAuditEvent } from "@/lib/audit";
+import { parseAddressFields } from "@/lib/address";
 
 export async function createClient(formData: FormData) {
   const actor = await authorize("clients:manage");
@@ -24,7 +25,7 @@ export async function createClient(formData: FormData) {
     .values({
       name,
       clientType,
-      billingAddress: String(formData.get("billingAddress") ?? "").trim() || null,
+      ...parseAddressFields(formData),
       createdBy: actor.id,
     })
     .returning();
@@ -59,7 +60,7 @@ export async function updateClient(formData: FormData) {
 
   const after = {
     name,
-    billingAddress: String(formData.get("billingAddress") ?? "").trim() || null,
+    ...parseAddressFields(formData),
     status,
     updatedAt: new Date(),
   };

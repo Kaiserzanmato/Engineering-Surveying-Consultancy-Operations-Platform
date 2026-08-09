@@ -5,6 +5,8 @@ import { authorize, AuthorizationError, getCurrentUser } from "@/lib/auth/author
 import { getDb } from "@/db";
 import { clients } from "@/db/schema";
 import { createClient } from "./actions";
+import { SubmitButton } from "@/components/submit-button";
+import { AddressFields } from "@/components/address-fields";
 
 export default async function ClientsPage() {
   try {
@@ -40,16 +42,10 @@ export default async function ClientsPage() {
                 <option value="individual">Individual</option>
               </select>
             </label>
-            <label className="col-span-2 flex flex-col gap-1">
-              Billing address
-              <input name="billingAddress" className="rounded border border-black/20 px-2 py-1" />
-            </label>
-            <button
-              type="submit"
-              className="col-span-2 mt-2 w-fit rounded bg-black px-3 py-1.5 text-white hover:bg-black/80"
-            >
+            <AddressFields />
+            <SubmitButton className="col-span-2 mt-2 w-fit rounded bg-black px-3 py-1.5 text-white hover:bg-black/80 disabled:opacity-50">
               Create client
-            </button>
+            </SubmitButton>
           </form>
         </details>
       )}

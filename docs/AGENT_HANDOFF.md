@@ -317,3 +317,37 @@ Coordination log for multi-tool agentic engineering (Claude Code, Codex, Antigra
 **Device/browser impact:** This entry's fixes were driven BY real browser testing (the user's), which is exactly the verification step Entry 9 was waiting on. Confirmed working in their actual browser session after Fix 2 deployed — pending their explicit re-confirmation message, but the technical verification (curl RSC-shape test returning 200, audit log showing continued correct behavior) is solid.
 
 **Next task:** User re-verifies buttons now work without needing manual refresh. Then, whenever ready: Projects (P1 item 3), and separately, a deliberate decision on the Clerk production-domain migration (needs: a domain, Google OAuth production credentials, new webhook registration) — not urgent, but real, and now doubly motivated since it would also let middleware-level `auth.protect()` be safely reintroduced.
+
+---
+
+## Entry 11 — 2026-08-09 — Claude Code (Sonnet 5)
+
+**Role:** Builder (CRM slice, second round of real-browser-driven fixes)
+
+**Objective:** User tried converting a lead to a client and reported it "seemed not showing," plus asked for a structured/country-adaptive billing address (explicit examples: Philippines needs street 1/2, barangay, city, province, ZIP; US needs street 1/2, city, state, ZIP) and general "fluency" fixes.
+
+**Investigation (Fix 1 — the crash):** Pulled the actual server error via `vercel logs --environment production` instead of guessing from the client-side symptom. Found: `Error: Cannot move a lead from "qualified" to "qualified"` — the user had double-clicked "Mark qualified"; the first click succeeded, the second (already in flight or clicked before the UI updated) correctly failed my own transition-validation check, but as an ugly uncaught crash instead of a graceful no-op. Root cause: **no form in the app disabled its submit button while its action was in flight**, so any status-changing button was vulnerable to this exact double-submit race. The client that appeared to exist without the lead updating was created via a *separate*, manual "New client" submission the user made afterward as a workaround — not by the (never-actually-reached) convert action.
+
+**Fix 1:** Made `changeLeadStatus`, `claimLead`, and `convertLeadToClient` idempotent for the "already in the target state" case (return/redirect instead of throwing) — the end state the user wanted was already true, so there's no reason to error.
+
+**Fix 2 (the "fluency" ask, broad):** Built `src/components/submit-button.tsx` (`useFormStatus`-based, disables + shows a pending state while its form's action runs) and swapped all 14 plain `<button type="submit">` instances across the app to use it. This closes off the whole class of double-submit bugs Fix 1 patched one instance of, not just the lead-status case.
+
+**Fix 3 (structured address, the large ask):** Replaced `clients.billingAddress` (free text) with 7 structured columns (`billingLine1/2`, `billingSubLocality`, `billingCity`, `billingStateProvince`, `billingPostalCode`, `billingCountry`). Migration note: `drizzle-kit generate` wanted an interactive prompt to disambiguate "is this a rename?" (no TTY available in this environment) — worked around it by splitting into two unambiguous migrations (add 7 columns + backfill the one existing free-text value into `billingLine1`, then drop the old column), rather than hand-writing the drizzle-kit meta snapshot JSON (too easy to get subtly wrong and corrupt future diffing).
+
+Built `src/lib/countries.ts` (full ISO 3166-1 English short-name list, public standardized data, not invented) and `src/lib/address.ts` (per-country field labels/visibility). Deliberately only hand-tuned labels for PH, US, CA, GB, AU — countries whose conventions are well-established enough to state confidently — everything else gets sensible generic labels ("State / Province / Region", "Postal code") rather than guessed conventions for the other ~185 countries, which risked being wrong. `src/components/address-fields.tsx` is a client component (needs interactivity: labels change live as the country dropdown changes) rendering the country select + adaptive fields with fixed form field names.
+
+**Files changed:** `src/db/schema.ts`, `drizzle/0003_flaky_tusk.sql` (add + backfill), `drizzle/0004_needy_pete_wisdom.sql` (drop old column), `src/lib/countries.ts` (new), `src/lib/address.ts` (new), `src/lib/address.test.ts` (new, 8 tests), `src/components/address-fields.tsx` (new), `src/components/submit-button.tsx` (new), `src/app/(app)/crm/leads/actions.ts` (idempotency), `src/app/(app)/crm/clients/actions.ts` (structured address), `src/app/(app)/crm/clients/page.tsx`, `src/app/(app)/crm/clients/[id]/page.tsx`, plus every file touched for the submit-button swap (`crm/leads/page.tsx`, `crm/leads/[id]/page.tsx`, `admin/users/page.tsx`, `admin/service-types/page.tsx`).
+
+**Tests:** `bun run test` (37/37, up from 28), `bunx tsc --noEmit`, `bun run lint`, `bun run build` all clean. Verified the address migration against live data: the one existing client's free-text `"Makati"` billing address correctly landed in `billing_line1` after both migrations ran, nothing lost.
+
+**Privacy/security impact:** None new — this is UX/data-modeling work on an already-access-controlled surface. `parseAddressFields()` validates the country code against the real ISO list server-side (not just trusting the client-side select), consistent with the app's existing pattern of never trusting client-submitted enum-like values (see `parseRoleSlug`, `parseLeadSource`).
+
+**Unresolved risk / known limitations:**
+- Country-specific address labels are only accurate for 5 countries (PH, US, CA, GB, AU); everything else uses generic labels. This was a deliberate scope decision (stated to the user implicitly through the code comments, not yet explicitly confirmed with them) rather than fabricating conventions for 190+ countries without a canonical reference — flag if the user expected full per-country accuracy.
+- No postal-code format validation (e.g. PH ZIP is 4 digits, US ZIP is 5 or 9) — fields accept any text. Not currently a blocker, but a natural next hardening step if data quality matters more later.
+- Leads still have a single free-text `location` field (PRD's general field notes/site location, not a formal billing address) — not restructured, since the user's request was specifically about billing address.
+- Everything carried over from Entry 10 unchanged (Clerk production domain still not configured; that's still separate and deliberate).
+
+**Device/browser impact:** Not yet re-verified by the user in a real browser after this round of fixes (unlike the previous "buttons not working" cycle, which they confirmed themselves). Recommend they retry: double-click a status button (should no longer crash, button should visibly disable), and try creating/editing a client with a Philippines address (should show Barangay + Province fields) and a US address (should show State + ZIP) to confirm the adaptive labels work as asked.
+
+**Next task:** User verification of both fixes in their browser. Then Projects (P1 item 3), same as Entry 10's next-task note.

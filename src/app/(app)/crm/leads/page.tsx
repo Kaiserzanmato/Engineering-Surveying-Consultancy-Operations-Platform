@@ -6,6 +6,7 @@ import { leads, users, serviceTypes, leadSourceEnum } from "@/db/schema";
 import { eq, desc } from "drizzle-orm";
 import { hasUnscopedLeadAccess, LEAD_SOURCE_LABELS } from "@/lib/crm/leads";
 import { createLead } from "./actions";
+import { SubmitButton } from "@/components/submit-button";
 
 export default async function LeadsPage() {
   try {
@@ -106,12 +107,9 @@ export default async function LeadsPage() {
                 className="rounded border border-black/20 px-2 py-1"
               />
             </label>
-            <button
-              type="submit"
-              className="col-span-2 mt-2 w-fit rounded bg-black px-3 py-1.5 text-white hover:bg-black/80"
-            >
+            <SubmitButton className="col-span-2 mt-2 w-fit rounded bg-black px-3 py-1.5 text-white hover:bg-black/80 disabled:opacity-50">
               Create lead
-            </button>
+            </SubmitButton>
           </form>
         </details>
       )}

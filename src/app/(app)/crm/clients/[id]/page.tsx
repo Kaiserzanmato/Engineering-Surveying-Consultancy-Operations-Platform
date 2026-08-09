@@ -5,6 +5,8 @@ import { authorize, AuthorizationError, getCurrentUser } from "@/lib/auth/author
 import { getDb } from "@/db";
 import { clients, contacts, leads } from "@/db/schema";
 import { updateClient, createContact, updateContact } from "../actions";
+import { SubmitButton } from "@/components/submit-button";
+import { AddressFields } from "@/components/address-fields";
 
 export default async function ClientDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -73,20 +75,20 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
               <option value="inactive">Inactive</option>
             </select>
           </label>
-          <label className="col-span-2 flex flex-col gap-1">
-            Billing address
-            <input
-              name="billingAddress"
-              defaultValue={client.billingAddress ?? ""}
-              className="rounded border border-black/20 px-2 py-1"
-            />
-          </label>
-          <button
-            type="submit"
-            className="col-span-2 mt-2 w-fit rounded bg-black px-3 py-1.5 text-white hover:bg-black/80"
-          >
+          <AddressFields
+            defaultValues={{
+              line1: client.billingLine1,
+              line2: client.billingLine2,
+              subLocality: client.billingSubLocality,
+              city: client.billingCity,
+              stateProvince: client.billingStateProvince,
+              postalCode: client.billingPostalCode,
+              country: client.billingCountry,
+            }}
+          />
+          <SubmitButton className="col-span-2 mt-2 w-fit rounded bg-black px-3 py-1.5 text-white hover:bg-black/80 disabled:opacity-50">
             Save changes
-          </button>
+          </SubmitButton>
         </form>
       )}
 
@@ -136,12 +138,9 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
                     <input type="checkbox" name="isPrimary" defaultChecked={contact.isPrimary} />
                     Primary contact
                   </label>
-                  <button
-                    type="submit"
-                    className="col-span-2 w-fit rounded border border-black/20 px-2 py-1 hover:bg-black/5"
-                  >
+                  <SubmitButton className="col-span-2 w-fit rounded border border-black/20 px-2 py-1 hover:bg-black/5 disabled:opacity-50">
                     Save
-                  </button>
+                  </SubmitButton>
                 </form>
               ) : (
                 <div>
@@ -194,12 +193,9 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
                 <input type="checkbox" name="isPrimary" />
                 Primary contact
               </label>
-              <button
-                type="submit"
-                className="col-span-2 w-fit rounded bg-black px-3 py-1.5 text-white hover:bg-black/80"
-              >
+              <SubmitButton className="col-span-2 w-fit rounded bg-black px-3 py-1.5 text-white hover:bg-black/80 disabled:opacity-50">
                 Add contact
-              </button>
+              </SubmitButton>
             </form>
           </details>
         )}
