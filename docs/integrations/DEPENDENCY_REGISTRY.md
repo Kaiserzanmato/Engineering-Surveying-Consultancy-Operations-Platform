@@ -61,32 +61,32 @@ Per `/TECHNICAL_ARCHITECTURE.md` §11 and `/AGENTS.md` Phase M. Every runtime de
 | Cost | Plan-dependent |
 | Fallback | Self-hosted Postgres if managed option is rejected |
 | Exit/migration plan | Standard `pg_dump`/logical replication — Postgres is not proprietary |
-| Status | **Confirmed direction — not yet provisioned; region/residency still open, see IMPLEMENTATION_PLAN §1** |
+| Status | **Install started 2026-08-09, blocked on marketplace terms acceptance** — `vercel integration add neon --no-claim` requires the account owner to accept terms in-browser: https://vercel.com/oliveripsioco-3103s-projects/~/integrations/accept-terms/neon?source=cli — then retry the same command. Region/residency still open, see IMPLEMENTATION_PLAN §1. |
 
 ## Private object storage
 
 | Field | Value |
 |---|---|
-| Vendor/service | Vercel Blob (private) or S3-compatible via Marketplace — exact vendor TBD |
+| Vendor/service | Vercel Blob (private) — store name `point-view-storage` |
 | Purpose | Field photos, technical files, document versions — private-by-default, signed short-lived access per `/TECHNICAL_ARCHITECTURE.md` §15 |
 | Data processed | Potentially sensitive project/field imagery and documents |
-| Region | TBD — same residency question as database |
-| Authentication | Signed URL generation server-side only |
-| Permissions | Project-scoped access classification, enforced server-side |
-| SLA | Vendor-dependent |
+| Region | `iad1` (US East) — **provisioned before data-residency requirement was confirmed; may need to be recreated in the correct region once the Philippine DPA residency question is answered (see `docs/privacy/DATA_MAP.md` open questions)** |
+| Authentication | `BLOB_READ_WRITE_TOKEN` (auto-provisioned into `.env.local`, gitignored) — signed URL generation server-side only |
+| Permissions | Project-scoped access classification, enforced server-side (not yet implemented — no app code exists yet) |
+| SLA | Vercel plan tier |
 | Rate limits | Vendor-dependent |
-| Security/privacy docs | Attach once selected |
-| Subprocessors | Attach once selected |
+| Security/privacy docs | https://vercel.com/docs/vercel-blob/private-storage |
+| Subprocessors | Vercel's subprocessor list |
 | Cost | Usage-based — monitor as field upload volume grows |
-| Fallback | S3-compatible alternative if primary choice rejected |
-| Exit/migration plan | Bulk export via vendor API/CLI |
-| Status | **Confirmed direction — not yet provisioned** |
+| Fallback | S3-compatible alternative if this choice is rejected |
+| Exit/migration plan | Bulk export via `vercel blob list` / API |
+| Status | **Provisioned 2026-08-09 — region needs revisiting pending residency confirmation** |
 
 ## Authentication provider
 
 | Field | Value |
 |---|---|
-| Vendor/service | Managed auth provider supporting MFA (e.g., Clerk) — exact vendor TBD |
+| Vendor/service | Clerk (native Vercel Marketplace integration, supports MFA) |
 | Purpose | Login, session management, MFA for System Administrator (mandatory) and privileged roles (recommended) per PRD §8 |
 | Data processed | Credentials, session tokens, MFA enrollment data — highly sensitive |
 | Region | TBD |
@@ -99,7 +99,7 @@ Per `/TECHNICAL_ARCHITECTURE.md` §11 and `/AGENTS.md` Phase M. Every runtime de
 | Cost | Plan-dependent, typically per-MAU |
 | Fallback | Self-hosted auth (e.g., NextAuth + Postgres) if managed vendor rejected — higher engineering burden for MFA/session security |
 | Exit/migration plan | Confirm user-export capability before adoption — auth vendor lock-in is high-risk to migrate later |
-| Status | **Confirmed direction — not yet provisioned; this is the highest-risk vendor choice to get wrong, pick carefully at provisioning time** |
+| Status | **Install started 2026-08-09, blocked on marketplace terms acceptance** — `vercel integration add clerk --no-claim` requires the account owner to accept terms in-browser: https://vercel.com/oliveripsioco-3103s-projects/~/integrations/accept-terms/clerk?source=cli — then retry the same command. This is the highest-risk vendor choice to get wrong (auth), so double-check MFA configuration for System Administrator at provisioning time. |
 
 ## AI provider (proposed, OFF by default)
 
