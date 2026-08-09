@@ -100,3 +100,27 @@ Coordination log for multi-tool agentic engineering (Claude Code, Codex, Antigra
 **Device/browser impact:** N/A.
 
 **Next task:** Identity/RBAC vertical slice — Drizzle (or equivalent) schema against Neon, Clerk SDK integration (`@clerk/nextjs`) with MFA enabled for System Administrator in Clerk's dashboard, the single server-side authorization function implementing the ALLOW rule (`TECHNICAL_ARCHITECTURE.md` §5.3), and negative authorization tests, per `docs/IMPLEMENTATION_PLAN.md` §2 P1 item 1 and `AGENTS.md` Phase F's ten-step slice checklist.
+
+---
+
+## Entry 4 — 2026-08-09 — Claude Code (Sonnet 5)
+
+**Role:** Builder (P0 scaffolding, residency follow-up)
+
+**Objective:** Checked in with the user on the data-residency open question before starting Identity/RBAC. No legal requirement was pre-documented anywhere in the proposal/PRD (confirmed by grep — only a generic "have counsel review the final agreement" line exists). Gave the user relevant background (Philippine DPA does not mandate strict data localization, unlike some countries) plus a concrete non-legal reason to still care: field/office users are Philippines-based and US-East hosting adds real latency. User chose to move to Singapore (`sin1`) now, while it's free (no data exists yet).
+
+**Files changed:**
+- Deleted and recreated the Neon resource: `neon-chestnut-pocket` (us-east-1) → `neon-purple-tree` (`sin1`/`ap-southeast-1`), via `vercel integration-resource remove --disconnect-all --yes` then `vercel integration add neon --no-claim -m region=sin1`.
+- Deleted and recreated the Blob store: `point-view-storage` (iad1) → `point-view-storage` (`sin1`), via `vercel integration-resource remove` then `vercel blob create-store --region sin1`.
+- Clerk (`clerk-orange-bucket`) left as-is — its region isn't exposed via this CLI's provisioning metadata; noted in the data map as something to check in Clerk's dashboard if residency becomes a hard requirement later.
+- Updated `docs/integrations/DEPENDENCY_REGISTRY.md` and `docs/privacy/DATA_MAP.md` to reflect actual final regions and to record this as a UX/latency decision, explicitly not a confirmed legal one — flagged for legal counsel confirmation before production.
+
+**Tests:** N/A — no schema/data existed in either resource before deletion, so nothing was lost.
+
+**Privacy/security impact:** None beyond what's already logged — this only changes *where* infrastructure lives, not what data flows exist (none yet).
+
+**Unresolved risk:** Same as Entry 3, minus the region inconsistency. Still open: legal confirmation of residency requirement (informal, non-legal-advice reasoning was used to make a practical call, not a substitute for actual counsel review before production), Clerk's actual data region, retention periods, privacy/security owners.
+
+**Device/browser impact:** N/A.
+
+**Next task:** Unchanged from Entry 3 — Identity/RBAC vertical slice is next.

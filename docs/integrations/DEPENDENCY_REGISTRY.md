@@ -48,10 +48,10 @@ Per `/TECHNICAL_ARCHITECTURE.md` §11 and `/AGENTS.md` Phase M. Every runtime de
 
 | Field | Value |
 |---|---|
-| Vendor/service | Neon Postgres via Vercel Marketplace — resource `neon-chestnut-pocket` |
+| Vendor/service | Neon Postgres via Vercel Marketplace — resource `neon-purple-tree` |
 | Purpose | Primary structured data store: users, RBAC, projects, workflow state, audit/security events, retention metadata |
 | Data processed | Personal data (client/employee), project data, audit evidence — classify per `docs/privacy/DATA_MAP.md` |
-| Region | AWS `us-east-1` — **provisioned before data-residency requirement was confirmed; may need a new project in the correct region once the Philippine DPA residency question is answered** (same open question as the Blob store) |
+| Region | `sin1` / AWS `ap-southeast-1` (Singapore) — chosen for latency to Philippines-based users; no confirmed legal residency requirement (Philippine DPA does not mandate strict in-country localization). Originally provisioned in `us-east-1`, recreated in `ap-southeast-1` 2026-08-09 before any schema/data existed. |
 | Authentication | `DATABASE_URL` / `DATABASE_URL_UNPOOLED` / `PG*` / `POSTGRES_*` env vars, auto-provisioned into `.env.local` (gitignored) — never committed |
 | Permissions | Default Neon role from provisioning; scope down to an app-specific least-privilege role before the identity/RBAC slice ships |
 | SLA | Neon's Vercel Marketplace plan tier |
@@ -61,7 +61,7 @@ Per `/TECHNICAL_ARCHITECTURE.md` §11 and `/AGENTS.md` Phase M. Every runtime de
 | Cost | Plan-dependent — monitor via Vercel billing |
 | Fallback | Self-hosted Postgres if managed option is rejected |
 | Exit/migration plan | Standard `pg_dump`/logical replication — Postgres is not proprietary |
-| Status | **Provisioned 2026-08-09 — region needs revisiting pending residency confirmation; no schema exists yet** |
+| Status | **Provisioned in `sin1`/`ap-southeast-1` 2026-08-09 — no schema exists yet** |
 
 ## Private object storage
 
@@ -70,7 +70,7 @@ Per `/TECHNICAL_ARCHITECTURE.md` §11 and `/AGENTS.md` Phase M. Every runtime de
 | Vendor/service | Vercel Blob (private) — store name `point-view-storage` |
 | Purpose | Field photos, technical files, document versions — private-by-default, signed short-lived access per `/TECHNICAL_ARCHITECTURE.md` §15 |
 | Data processed | Potentially sensitive project/field imagery and documents |
-| Region | `iad1` (US East) — **provisioned before data-residency requirement was confirmed; may need to be recreated in the correct region once the Philippine DPA residency question is answered (see `docs/privacy/DATA_MAP.md` open questions)** |
+| Region | `sin1` (Singapore) — chosen for latency to Philippines-based field/office users; no confirmed legal residency requirement exists (Philippine DPA does not mandate strict in-country localization), this is a UX/latency decision made 2026-08-09. Originally provisioned in `iad1` (US East) then recreated in `sin1` before any data existed. |
 | Authentication | `BLOB_READ_WRITE_TOKEN` (auto-provisioned into `.env.local`, gitignored) — signed URL generation server-side only |
 | Permissions | Project-scoped access classification, enforced server-side (not yet implemented — no app code exists yet) |
 | SLA | Vercel plan tier |
@@ -80,7 +80,7 @@ Per `/TECHNICAL_ARCHITECTURE.md` §11 and `/AGENTS.md` Phase M. Every runtime de
 | Cost | Usage-based — monitor as field upload volume grows |
 | Fallback | S3-compatible alternative if this choice is rejected |
 | Exit/migration plan | Bulk export via `vercel blob list` / API |
-| Status | **Provisioned 2026-08-09 — region needs revisiting pending residency confirmation** |
+| Status | **Provisioned in `sin1` 2026-08-09** |
 
 ## Authentication provider
 

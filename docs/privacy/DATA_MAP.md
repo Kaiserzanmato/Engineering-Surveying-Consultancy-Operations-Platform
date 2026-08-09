@@ -12,7 +12,7 @@ This document feeds `docs/privacy/PIA.md` (not yet drafted — do not proceed to
 
 | Category | Source entities (PRD §18) | Personal/sensitive? | Purpose | Basis | Roles with access (see PRD §12 RBAC matrix) | Storage | Region | Retention | Deletion method |
 |---|---|---|---|---|---|---|---|---|---|
-| User/employee identity | `User`, `Role`, `Team` | Personal (employee) | Authentication, authorization, accountability | Employment/operational necessity | SysAdmin (full), Owner/GM (limited) | Clerk (identity) + Postgres (app-side profile/role mapping) | TBD — Clerk region + Neon region both need residency confirmation | TBD | Account deactivation + data subject deletion request process (PRD §7) |
+| User/employee identity | `User`, `Role`, `Team` | Personal (employee) | Authentication, authorization, accountability | Employment/operational necessity | SysAdmin (full), Owner/GM (limited) | Clerk (identity) + Postgres (app-side profile/role mapping) | Neon: `sin1`/Singapore. Clerk: not exposed, TBD | TBD | Account deactivation + data subject deletion request process (PRD §7) |
 | Lead/inquiry data | `Lead` | Personal (prospective client contact info) | Sales intake, qualification | Legitimate business interest (pre-contract) | Sales, Owner/GM (full); Admin (assigned); Finance (limited) | Postgres | TBD | TBD | Retention rule + business hold check before deletion |
 | Client & contact data | `Client`, `Contact` | Personal (client-side individuals) | Service delivery, relationship management | Contract/legitimate interest | Full: SysAdmin, Owner/GM; Assigned: Admin/Field/CAD/Reviewer/Sales; Limited: Finance | Postgres | TBD | TBD | Same as above |
 | Project/service data | `Project`, `ProjectMember`, `ServiceType`, `Requirement` | Mixed — project metadata generally non-personal, but linked to client identity | Operational tracking | Contract | Per RBAC matrix (project-scoped) | Postgres | TBD | TBD | Cascades with client/project closure rules — needs definition |
@@ -36,14 +36,14 @@ This document feeds `docs/privacy/PIA.md` (not yet drafted — do not proceed to
 | Processor | Data category processed | Purpose | Status |
 |---|---|---|---|
 | Vercel | All application traffic/compute | Hosting | Confirmed direction, see `docs/integrations/DEPENDENCY_REGISTRY.md` |
-| Neon (via Vercel Marketplace) | Structured data — see table above | Database | Confirmed direction, provisioning pending user terms acceptance |
-| Vercel Blob | Field photos, documents, technical files | Private object storage | **Provisioned** — private store `point-view-storage` created in `iad1` region; region not yet confirmed against residency requirement, see open questions |
-| Clerk (or equivalent, via Vercel Marketplace) | User credentials, session data, MFA enrollment | Authentication | Confirmed direction, provisioning pending user terms acceptance |
+| Neon (via Vercel Marketplace) | Structured data — see table above | Database | **Provisioned** — `neon-purple-tree` in `sin1`/`ap-southeast-1` (Singapore) |
+| Vercel Blob | Field photos, documents, technical files | Private object storage | **Provisioned** — private store `point-view-storage` in `sin1` (Singapore) |
+| Clerk (via Vercel Marketplace) | User credentials, session data, MFA enrollment | Authentication | **Provisioned** — `clerk-orange-bucket`; region not exposed via this provisioning path, check Clerk's dashboard if residency becomes a hard requirement |
 | AI provider (unselected) | N/A — not enabled | Optional bounded AI | Not in scope until Phase N |
 
 ## Open questions blocking a complete data map (need client/user input, not engineering judgment)
 
-1. **Data residency** — does Point View's data need to stay within the Philippines or a specific region under the DPA? The Blob store was provisioned in `iad1` (US East) by default since this wasn't yet answered — **this may need to be reprovisioned once residency is confirmed**, and the same applies to the still-unprovisioned Neon database and Clerk auth region.
+1. **Data residency — resolved as a UX/latency decision, not a confirmed legal requirement.** No legal residency requirement has been confirmed with the client. As background (not legal advice — get qualified Philippine counsel to confirm before production): the Philippine DPA (RA 10173) does not mandate strict in-country data localization the way some countries' laws do; cross-border processing is generally permitted with adequate contractual safeguards. Given that, Neon and Vercel Blob were provisioned in `sin1`/`ap-southeast-1` (Singapore) on 2026-08-09 primarily for latency to Philippines-based field/office users, not because of a confirmed legal mandate. **This should still be confirmed with Point View's legal counsel before production**, and revisited if the answer turns out to require in-country hosting (Vercel/Neon do not currently offer a Philippines region — Singapore is the closest option). Clerk's data region is not exposed via this provisioning path; check its dashboard if residency becomes a hard requirement.
 2. **Retention periods per category** — every "TBD" in the table above needs an actual number (or a rule like "life of client relationship + N years") from Point View's business/legal side, not an invented default.
 3. **Designated privacy owner / DPO-equivalent** — needed to own the PIA sign-off and data-subject request handling.
 4. **Designated security/incident owner** — needed for the incident response doc and audit escalation paths.
