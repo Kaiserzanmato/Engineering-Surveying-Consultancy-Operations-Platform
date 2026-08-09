@@ -39,7 +39,7 @@ From PRD §12: System Administrator, Owner/GM, Administrative Staff, Field Team 
 
 | Threat | Relevant to | Mitigation | Status |
 |---|---|---|---|
-| Account takeover | Auth provider, sessions | Clerk-managed auth; MFA app-level enforcement for System Administrator (`src/lib/auth/mfa.ts`, redirects to enrollment if missing); suspend revokes all Clerk sessions via `banUser` | **Implemented** for System Administrator MFA + suspend-revokes-sessions. Other privileged roles: MFA recommended but not enforced (PRD §8 only mandates it for SysAdmin) |
+| Account takeover | Auth provider, sessions | Clerk-managed auth; MFA app-level enforcement for System Administrator (`src/lib/auth/mfa.ts`); suspend revokes all Clerk sessions via `banUser` | Suspend-revokes-sessions: **implemented**. MFA: **built but deliberately disabled** — Clerk's Hobby plan (currently in use) offers no MFA strategy at all (confirmed 2026-08-09 in its dashboard; both Authenticator app and SMS are Pro-only). `MFA_ENFORCEMENT_ENABLED = false` in `src/lib/auth/mfa.ts` with a non-blocking dashboard nudge in its place. **This is a real gap against PRD §8's "MFA mandatory for System Administrator" — must be resolved (Clerk Pro upgrade, or an alternative MFA path) before production**, tracked here so it isn't silently forgotten |
 | Broken access control / horizontal project leakage | All project-scoped resources | Single server-side authorization function (`src/lib/auth/authorize.ts`) implementing the ALLOW rule, called in every protected layout/page/server action | **Implemented** for the identity/RBAC surface (`/dashboard`, `/admin/users`). No project-scoped resources exist yet to test the `resourceInScope` hook against — revisit once Projects ships |
 | Vertical privilege escalation (admin escalation) | Role/permission management | Role changes restricted to `users:manage_roles` (System Administrator only, per `docs/security/RBAC_MATRIX.md`); server action re-validates on every call, not just UI-hidden buttons; last-System-Administrator removal is blocked | **Implemented** — see `src/app/admin/users/actions.ts` |
 | Insecure direct object reference (file ID enumeration) | Document/photo repository | Signed, short-lived URLs for all private Blob access; opaque non-sequential asset IDs; server-side project-scope check before signing a URL | P1, private storage slice |
@@ -65,7 +65,8 @@ The identity/RBAC slice resolved the biggest gap (no authorization layer) and ma
 2. **Audit log has no viewer UI and no dedicated access restriction of its own** — see the Insider misuse row above.
 3. **No project-scoped resources exist yet**, so `resourceInScope` in `authorize()` is unexercised — the mechanism is built but untested against a real case. Verify it actually gets used correctly when Projects ships, don't assume the hook alone is sufficient.
 4. **No in-app user invitation flow** — new accounts currently require either signing in for the first time (webhook-synced with zero roles, inert) plus a manual role grant, or direct Clerk-dashboard action. See `docs/security/RBAC_MATRIX.md` known limitations.
-5. Everything from the original draft that's still not built: malicious file upload defenses (no upload feature yet), signed-link handling (no file storage feature yet), CSRF specifics beyond Server Actions' defaults, CSP headers.
+5. **MFA is not enforced** — Clerk's Hobby plan has no MFA strategy available; enforcement code exists (`src/lib/auth/mfa.ts`) but is off via `MFA_ENFORCEMENT_ENABLED = false`, with a non-blocking dashboard nudge instead. Blocks a PRD §8 requirement. Owner decision needed: upgrade to Clerk Pro, or find another MFA path, before production.
+6. Everything from the original draft that's still not built: malicious file upload defenses (no upload feature yet), signed-link handling (no file storage feature yet), CSRF specifics beyond Server Actions' defaults, CSP headers.
 
 ## 6. Next update triggers
 
@@ -73,5 +74,6 @@ Update this document when:
 - Rate limiting is implemented (resolve gap 1).
 - An audit log viewer / access-control layer is built (resolve gap 2).
 - The Projects slice ships and exercises `resourceInScope` for the first time (resolve gap 3).
+- MFA is actually enabled and `MFA_ENFORCEMENT_ENABLED` flipped to `true` (resolve gap 5).
 - Any new external service is added (extend §1 trust boundary diagram and §3 assets).
 - AI is enabled for any feature (extend §4 AI-related rows from "deferred" to "planned"/"implemented", cross-link `docs/ai/AI_INVENTORY.md`).

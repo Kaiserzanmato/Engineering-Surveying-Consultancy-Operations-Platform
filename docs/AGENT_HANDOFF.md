@@ -193,3 +193,37 @@ Coordination log for multi-tool agentic engineering (Claude Code, Codex, Antigra
 **Unresolved risk:** Same as Entry 5 minus the webhook gap. Still pending: someone actually signing in to confirm the sync works, bootstrapping the first admin, and a real browser walkthrough of the RBAC UI.
 
 **Next task:** User signs in once, confirms their `users` row was created (proves the webhook fired correctly), then runs `bun run db:bootstrap-admin -- <their-email>`.
+
+---
+
+## Entry 7 — 2026-08-09 — Claude Code (Sonnet 5)
+
+**Role:** Builder (Identity/RBAC slice, full manual verification + MFA gap discovered)
+
+**Objective:** Walk the user through the rest of manual verification (sign in, bootstrap admin, exercise the MFA gate) that Entry 6 left as the next step.
+
+**What happened, in order:**
+1. User signed in via Google OAuth at `https://point-view-operations-platform.vercel.app/`. Confirmed via direct DB query: exactly one `users` row (`oliver.ipsioco@docypherlabs.com`), proving the webhook sync from Entry 6 actually works end-to-end, not just passing a signature-verification smoke test.
+2. Ran `bun run db:bootstrap-admin -- oliver.ipsioco@docypherlabs.com` — granted `system_administrator`.
+3. User refreshed `/dashboard` → correctly redirected to `/account/security?mfaRequired=1` with the banner — confirms `authorize()`, role loading, and the MFA gate all work correctly together.
+4. **Discovered a real blocker while trying to complete MFA setup**: Clerk's Security tab showed no MFA option at all (only Password / Active devices / Delete account). Investigated via the Clerk dashboard (reached through Vercel's "Open in Clerk" link, since this Marketplace-provisioned instance doesn't show up under the user's normal `dashboard.clerk.com` login) → Configure → Multi-factor: both "Authenticator application" and "SMS verification code" are tagged **Pro** — the current **Hobby (free) plan has no MFA strategy available at all**.
+5. Asked the user how to proceed rather than assuming; they chose to relax enforcement for now rather than upgrade Clerk or pause.
+
+**Side note on a wrong turn:** Before reaching the "Open in Clerk" link, this agent briefly tried `clerk auth login` (an OAuth device-flow to claim the Clerk app via the CLI) in the background, then killed it mid-flow when deciding the Vercel-dashboard path was safer/more appropriate for the user to drive themselves. The killed process had already opened a real Safari tab; the user later clicked into that stale tab and hit a "Safari can't connect to the server" error against a local callback port that no longer had a listener. No harm done (dead local loopback callback, nothing exposed), but flagging it as a process lesson: don't background an interactive auth flow like that without warning the user it'll open a browser tab, and clean up more deliberately than a bare `pkill` when abandoning an approach mid-flight.
+
+**Files changed:**
+- `src/lib/auth/mfa.ts` — added `MFA_ENFORCEMENT_ENABLED = false` constant gating the whole function; enforcement logic itself is unchanged, just currently short-circuited. Re-enabling once Clerk has an MFA strategy is a one-line flip, not a rewrite.
+- `src/app/dashboard/page.tsx` — added a non-blocking amber banner shown to System Administrator accounts without a second factor, so the gap stays visible instead of silently disappearing now that the hard redirect is off.
+- Docs updated: `docs/integrations/DEPENDENCY_REGISTRY.md` (Clerk's Cost/Status rows — Hobby plan, no MFA strategy available), `docs/security/THREAT_MODEL.md` (Account takeover row + new gap 5 + trigger), `docs/security/RBAC_MATRIX.md` (known limitations note).
+
+**Tests:** `bun run test` (11/11), `bunx tsc --noEmit`, `bun run lint` all clean after the change. Not yet redeployed to production as of writing this entry — see next task.
+
+**Privacy/security impact:** This is the first deliberate, user-approved deviation from a PRD-mandated control (§8: "MFA mandatory for System Administrators"). It's scoped narrowly (one boolean, one route's enforcement), documented in three places (code comment, THREAT_MODEL.md, RBAC_MATRIX.md, DEPENDENCY_REGISTRY.md — four, actually), and paired with a visible in-app reminder rather than being silent. Explicitly NOT resolved: whether Point View wants to pay for Clerk Pro, or pursue a different MFA path. That's a decision for the user/client, not something to default into.
+
+**Unresolved risk:**
+- MFA gap (above) — needs an owner decision before production, tracked in `docs/security/THREAT_MODEL.md` gap 5.
+- Everything else carried over from Entry 5/6 unchanged (rate limiting, audit log viewer, `resourceInScope` unexercised, no invite flow).
+
+**Device/browser impact:** First real confirmation the flow works in an actual browser (Safari, macOS) — sign-in, dashboard, MFA redirect all rendered and behaved correctly. Still no cross-browser/device/accessibility pass (Phase D/L).
+
+**Next task:** Commit and redeploy this change (the user is currently blocked from reaching `/dashboard`/`/admin/users` until the MFA gate is disabled in production, not just locally). Then: user re-verifies `/admin/users` is reachable and usable. After that, this slice is fully manually verified end-to-end and CRM/Intake (P1 item 2) can start.

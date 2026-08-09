@@ -96,10 +96,10 @@ Per `/TECHNICAL_ARCHITECTURE.md` §11 and `/AGENTS.md` Phase M. Every runtime de
 | Rate limits | Confirm Clerk's built-in brute-force/login-attempt protection is enabled in its dashboard before relying on it |
 | Security/privacy docs | https://clerk.com/legal/privacy, https://clerk.com/legal/terms |
 | Subprocessors | Clerk |
-| Cost | Plan-dependent, typically per-MAU |
+| Cost | Currently **Hobby (free) plan**. Confirmed 2026-08-09 that Hobby does not include ANY MFA strategy — both Authenticator app (TOTP) and SMS are gated behind Clerk **Pro** in the dashboard (Configure → Multi-factor). Upgrading is a pending decision, not yet made. |
 | Fallback | Self-hosted auth (e.g., NextAuth + Postgres) if managed vendor rejected — higher engineering burden for MFA/session security |
 | Exit/migration plan | Confirm user-export capability before real users are created — auth vendor lock-in is high-risk to migrate later |
-| Status | **Provisioned 2026-08-09 — MFA is NOT yet configured/enforced; must be enabled for System Administrator (mandatory per PRD §8) before the identity/RBAC slice is considered done. No app-side integration code exists yet.** |
+| Status | **Provisioned and integrated (webhook live, sign-in working). MFA enforcement is app-level code that exists but is deliberately disabled** (`MFA_ENFORCEMENT_ENABLED = false` in `src/lib/auth/mfa.ts`) **because the Hobby plan has no MFA strategy to enforce.** PRD §8 requires MFA mandatory for System Administrator before production — this is a tracked, deliberate pre-production gap, not an oversight. Resolve by upgrading to Clerk Pro (or choosing an alternative MFA path) and flipping that one constant back to `true`. |
 
 ## AI provider (proposed, OFF by default)
 
