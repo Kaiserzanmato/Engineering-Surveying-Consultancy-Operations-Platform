@@ -90,7 +90,7 @@ Per `/TECHNICAL_ARCHITECTURE.md` §11 and `/AGENTS.md` Phase M. Every runtime de
 | Purpose | Login, session management, MFA for System Administrator (mandatory) and privileged roles (recommended) per PRD §8 |
 | Data processed | Credentials, session tokens, MFA enrollment data — highly sensitive |
 | Region | Not yet confirmed — check Clerk instance settings in its dashboard before production; not exposed via the provisioned env vars |
-| Authentication | `CLERK_SECRET_KEY` / `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, auto-provisioned into `.env.local` (gitignored) |
+| Authentication | `CLERK_SECRET_KEY` / `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, auto-provisioned into `.env.local` (gitignored). Webhook: `CLERK_WEBHOOK_SIGNING_SECRET` — endpoint registered 2026-08-09 in Svix (Clerk's webhook infra, app `clerk-orange-bucket`) pointing at `https://point-view-operations-platform.vercel.app/api/webhooks/clerk`, subscribed to `user.created`/`user.updated`/`user.deleted`. Secret set in Vercel (Production + Preview as sensitive, Development as plain) and pulled to `.env.local`. Verified live: an unsigned test POST to the endpoint correctly returned 400 "Verification failed." |
 | Permissions | Admin console access restricted to System Administrator role (to be enforced once RBAC exists — Clerk dashboard access itself should also be restricted to authorized engineers only) |
 | SLA | Clerk's Vercel Marketplace plan tier |
 | Rate limits | Confirm Clerk's built-in brute-force/login-attempt protection is enabled in its dashboard before relying on it |

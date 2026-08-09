@@ -163,7 +163,33 @@ Coordination log for multi-tool agentic engineering (Claude Code, Codex, Antigra
 **Device/browser impact:** Not tested on real devices/browsers yet — only curl + reading rendered HTML. Layout uses Tailwind with relative/flex sizing, no fixed desktop-only widths, but no actual responsive/accessibility pass (Phase D/L) has been done.
 
 **Next task, in order:**
-1. **Register the Clerk webhook** (dashboard: Webhooks → Add Endpoint → `https://<deployed-url>/api/webhooks/clerk`, subscribe to `user.created`, `user.updated`, `user.deleted`; copy the signing secret into Vercel env vars as `CLERK_WEBHOOK_SIGNING_SECRET` and pull locally with `vercel env pull`).
+1. ~~Register the Clerk webhook~~ — **done** (Entry 6 below).
 2. Sign in once as a real user, confirm the local `users` row appears (webhook working), then run `bun run db:bootstrap-admin -- <your-email>` to become the first System Administrator.
 3. Manually verify the full flow in a browser: dashboard loads, `/admin/users` shows your account, role assignment/suspend work, MFA redirect triggers correctly for a System Administrator without a second factor.
 4. Only after that: start the CRM/Intake slice (P1 item 2).
+
+---
+
+## Entry 6 — 2026-08-09 — Claude Code (Sonnet 5)
+
+**Role:** Builder (Identity/RBAC slice, unblocking)
+
+**Objective:** Register the Clerk webhook that Entry 5 left as the blocking next step.
+
+**What happened:** The Clerk instance provisioned via Vercel Marketplace (`clerk-orange-bucket`) doesn't appear in the user's normal `dashboard.clerk.com` login — it's Vercel-managed, not tied to that Clerk account. Discovered via the `clerk` CLI (`bunx --bun clerk api /webhooks/svix -X POST -d '{}'`) that Clerk delegates webhook management to Svix, and the CLI can mint a one-time Svix dashboard login link scoped to the instance's webhook app (`POST /webhooks/svix` then `/webhooks/svix_url`). Handed that link to the user; they created the endpoint themselves in Svix's UI (browser step, same category as the earlier Marketplace terms-acceptance — not something the CLI can complete unattended) and pasted back the signing secret.
+
+**Files changed:** None in the repo — this was infrastructure configuration, not code.
+
+**Infra changes:**
+- Svix endpoint created: `https://point-view-operations-platform.vercel.app/api/webhooks/clerk`, subscribed to `user.created`, `user.updated`, `user.deleted`.
+- `CLERK_WEBHOOK_SIGNING_SECRET` added to Vercel (Production + Preview as sensitive, Development as plain) via `vercel env add`, piped through stdin rather than passed as a CLI flag (avoids the secret sitting in shell history / process listing). Pulled into local `.env.local` via `vercel env pull`.
+- Redeployed production (`vercel deploy --prod --yes`) so the live deployment picks up the new env var — Vercel does not retroactively inject env vars into already-built deployments.
+- Updated `docs/integrations/DEPENDENCY_REGISTRY.md`'s Clerk row with the actual endpoint/secret status.
+
+**Tests:** Verified live — an unsigned POST to `https://point-view-operations-platform.vercel.app/api/webhooks/clerk` correctly returns 400 "Verification failed" (svix signature check working). Homepage returns 200. **Not yet verified: a real Clerk-signed webhook delivery actually reaching the route and creating a `users` row** — that only happens on an actual sign-in, which hasn't occurred yet.
+
+**Privacy/security impact:** None new — this closes the gap flagged in Entry 5 (webhook route existed but wasn't reachable/registered). The signing secret was pasted in plaintext into the conversation by the user; it was not echoed back in any tool output or committed to the repo, and is stored only in Vercel's env var store and the gitignored local `.env.local`.
+
+**Unresolved risk:** Same as Entry 5 minus the webhook gap. Still pending: someone actually signing in to confirm the sync works, bootstrapping the first admin, and a real browser walkthrough of the RBAC UI.
+
+**Next task:** User signs in once, confirms their `users` row was created (proves the webhook fired correctly), then runs `bun run db:bootstrap-admin -- <their-email>`.
