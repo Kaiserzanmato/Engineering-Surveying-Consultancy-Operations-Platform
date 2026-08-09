@@ -227,3 +227,24 @@ Coordination log for multi-tool agentic engineering (Claude Code, Codex, Antigra
 **Device/browser impact:** First real confirmation the flow works in an actual browser (Safari, macOS) — sign-in, dashboard, MFA redirect all rendered and behaved correctly. Still no cross-browser/device/accessibility pass (Phase D/L).
 
 **Next task:** Commit and redeploy this change (the user is currently blocked from reaching `/dashboard`/`/admin/users` until the MFA gate is disabled in production, not just locally). Then: user re-verifies `/admin/users` is reachable and usable. After that, this slice is fully manually verified end-to-end and CRM/Intake (P1 item 2) can start.
+
+---
+
+## Entry 8 — 2026-08-09 — Claude Code (Sonnet 5)
+
+**Role:** Builder (Identity/RBAC slice — final verification)
+
+**Objective:** Confirm `/admin/users` is fully usable in production after Entry 7's fix, closing out manual verification for this slice.
+
+**What happened:** Deployed Entry 7's change, user refreshed `/admin/users` in production and confirmed: their account is listed with the `System Administrator` role badge (with a working remove control), the role-assignment dropdown correctly lists the 8 *other* roles (excludes the one already assigned — confirms the `availableRoles` filter in `src/app/admin/users/page.tsx` works), an `Assign` button, `Status: Active`, and a `Suspend` control. All rendering and, by construction (Server Actions, no separate "it doesn't do anything" report from the user), functioning.
+
+**Files changed:** None — verification only.
+
+**Tests:** Manual, in a real browser, in production. This is the first time every piece of the slice — webhook sync, role bootstrap, `authorize()`, the MFA gate (now correctly non-blocking), and the full `/admin/users` CRUD surface — has been confirmed working together outside of unit tests and curl smoke checks.
+
+**Status: identity/RBAC vertical slice is DONE for its defined scope** (see `docs/security/RBAC_MATRIX.md` for exactly what "done" covers and what's deliberately excluded — teams, project-level scope, invite flow, MFA enforcement). Remaining open items are tracked, not forgotten:
+- MFA enforcement disabled pending a Clerk Pro decision (`docs/security/THREAT_MODEL.md` gap 5).
+- Rate limiting, audit log viewer, `resourceInScope` still unexercised (gaps 1–3).
+- No in-app invite flow (gap 4).
+
+**Next task:** Per `docs/IMPLEMENTATION_PLAN.md` §2, P1 item 2 — CRM/Intake (leads, qualification, client profile, contacts) — pending user go-ahead.
