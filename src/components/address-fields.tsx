@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { COUNTRIES } from "@/lib/countries";
 import { getAddressLabels } from "@/lib/address";
 
@@ -14,15 +14,65 @@ export type AddressDefaultValues = {
   country?: string | null;
 };
 
+type PhAddressModule = typeof import("@/lib/ph-address");
+
 /**
  * Structured, country-adaptive billing address fields. Field names are
  * fixed (billingLine1, billingLine2, billingSubLocality, billingCity,
  * billingStateProvince, billingPostalCode, billingCountry) — read these
  * exact names in the receiving Server Action.
+ *
+ * For the Philippines specifically, this renders real cascading Province
+ * -> City/Municipality -> Barangay dropdowns (backed by real PSA data,
+ * see src/lib/ph-address.ts) with postal code auto-fill, rather than free
+ * text — lazy-loaded only when "Philippines" is selected, since the
+ * underlying dataset is large (~4.5MB, 42k+ barangays) and most users of
+ * this app won't need it. Every other country keeps free-text fields with
+ * generic (or, for a handful of countries, locally-correct) labels — see
+ * src/lib/address.ts for why a full cascading system isn't attempted for
+ * every country.
  */
 export function AddressFields({ defaultValues = {} }: { defaultValues?: AddressDefaultValues }) {
   const [country, setCountry] = useState(defaultValues.country ?? "");
   const labels = getAddressLabels(country || null);
+  const isPH = country === "PH";
+
+  const [phModule, setPhModule] = useState<PhAddressModule | null>(null);
+  const phLoading = isPH && !phModule;
+  const [province, setProvince] = useState(defaultValues.stateProvince ?? "");
+  const [municipality, setMunicipality] = useState(defaultValues.city ?? "");
+  const [barangay, setBarangay] = useState(defaultValues.subLocality ?? "");
+  const [postalCode, setPostalCode] = useState(defaultValues.postalCode ?? "");
+
+  useEffect(() => {
+    if (!isPH || phModule) return;
+    let cancelled = false;
+    import("@/lib/ph-address").then((mod) => {
+      if (!cancelled) setPhModule(mod);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [isPH, phModule]);
+
+  const provinceOptions = useMemo(() => (phModule ? phModule.getPhProvinces() : []), [phModule]);
+  const municipalityOptions = useMemo(
+    () => (phModule && province ? phModule.getPhMunicipalities(province) : []),
+    [phModule, province],
+  );
+  const barangayOptions = useMemo(
+    () => (phModule && province && municipality ? phModule.getPhBarangays(province, municipality) : []),
+    [phModule, province, municipality],
+  );
+
+  function handleMunicipalityChange(name: string) {
+    setMunicipality(name);
+    setBarangay("");
+    if (phModule && name) {
+      const code = phModule.getPhPostalCode(name);
+      if (code) setPostalCode(code);
+    }
+  }
 
   return (
     <>
@@ -31,7 +81,12 @@ export function AddressFields({ defaultValues = {} }: { defaultValues?: AddressD
         <select
           name="billingCountry"
           value={country}
-          onChange={(e) => setCountry(e.target.value)}
+          onChange={(e) => {
+            setCountry(e.target.value);
+            setProvince("");
+            setMunicipality("");
+            setBarangay("");
+          }}
           className="rounded border border-black/20 px-2 py-1"
         >
           <option value="">— select —</option>
@@ -58,42 +113,107 @@ export function AddressFields({ defaultValues = {} }: { defaultValues?: AddressD
           className="rounded border border-black/20 px-2 py-1"
         />
       </label>
-      {labels.showSubLocality && (
-        <label className="flex flex-col gap-1">
-          {labels.subLocalityLabel}
-          <input
-            name="billingSubLocality"
-            defaultValue={defaultValues.subLocality ?? ""}
-            className="rounded border border-black/20 px-2 py-1"
-          />
-        </label>
+
+      {isPH ? (
+        <>
+          {phLoading && (
+            <p className="col-span-2 text-sm text-black/50">Loading Philippine address data…</p>
+          )}
+          <label className="flex flex-col gap-1">
+            Province
+            <select
+              name="billingStateProvince"
+              value={province}
+              onChange={(e) => {
+                setProvince(e.target.value);
+                setMunicipality("");
+                setBarangay("");
+              }}
+              disabled={!phModule}
+              className="rounded border border-black/20 px-2 py-1"
+            >
+              <option value="">— select province —</option>
+              {provinceOptions.map((p) => (
+                <option key={p} value={p}>
+                  {p}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1">
+            City / Municipality
+            <select
+              name="billingCity"
+              value={municipality}
+              onChange={(e) => handleMunicipalityChange(e.target.value)}
+              disabled={!province}
+              className="rounded border border-black/20 px-2 py-1"
+            >
+              <option value="">— select city/municipality —</option>
+              {municipalityOptions.map((m) => (
+                <option key={m} value={m}>
+                  {m}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1">
+            {labels.subLocalityLabel}
+            <select
+              name="billingSubLocality"
+              value={barangay}
+              onChange={(e) => setBarangay(e.target.value)}
+              disabled={!municipality}
+              className="rounded border border-black/20 px-2 py-1"
+            >
+              <option value="">— select barangay —</option>
+              {barangayOptions.map((b) => (
+                <option key={b} value={b}>
+                  {b}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1">
+            {labels.postalLabel} (auto-filled, editable)
+            <input
+              name="billingPostalCode"
+              value={postalCode}
+              onChange={(e) => setPostalCode(e.target.value)}
+              className="rounded border border-black/20 px-2 py-1"
+            />
+          </label>
+        </>
+      ) : (
+        <>
+          <label className="flex flex-col gap-1">
+            {labels.cityLabel}
+            <input
+              name="billingCity"
+              defaultValue={defaultValues.city ?? ""}
+              className="rounded border border-black/20 px-2 py-1"
+            />
+          </label>
+          <label className="flex flex-col gap-1">
+            {labels.stateLabel}
+            {labels.stateOptional ? "" : " *"}
+            <input
+              name="billingStateProvince"
+              defaultValue={defaultValues.stateProvince ?? ""}
+              className="rounded border border-black/20 px-2 py-1"
+            />
+          </label>
+          <label className="flex flex-col gap-1">
+            {labels.postalLabel}
+            {labels.postalOptional ? "" : " *"}
+            <input
+              name="billingPostalCode"
+              defaultValue={defaultValues.postalCode ?? ""}
+              className="rounded border border-black/20 px-2 py-1"
+            />
+          </label>
+        </>
       )}
-      <label className="flex flex-col gap-1">
-        {labels.cityLabel}
-        <input
-          name="billingCity"
-          defaultValue={defaultValues.city ?? ""}
-          className="rounded border border-black/20 px-2 py-1"
-        />
-      </label>
-      <label className="flex flex-col gap-1">
-        {labels.stateLabel}
-        {labels.stateOptional ? "" : " *"}
-        <input
-          name="billingStateProvince"
-          defaultValue={defaultValues.stateProvince ?? ""}
-          className="rounded border border-black/20 px-2 py-1"
-        />
-      </label>
-      <label className="flex flex-col gap-1">
-        {labels.postalLabel}
-        {labels.postalOptional ? "" : " *"}
-        <input
-          name="billingPostalCode"
-          defaultValue={defaultValues.postalCode ?? ""}
-          className="rounded border border-black/20 px-2 py-1"
-        />
-      </label>
     </>
   );
 }

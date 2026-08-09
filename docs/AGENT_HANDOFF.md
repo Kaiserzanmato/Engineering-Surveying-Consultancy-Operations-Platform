@@ -351,3 +351,40 @@ Built `src/lib/countries.ts` (full ISO 3166-1 English short-name list, public st
 **Device/browser impact:** Not yet re-verified by the user in a real browser after this round of fixes (unlike the previous "buttons not working" cycle, which they confirmed themselves). Recommend they retry: double-click a status button (should no longer crash, button should visibly disable), and try creating/editing a client with a Philippines address (should show Barangay + Province fields) and a US address (should show State + ZIP) to confirm the adaptive labels work as asked.
 
 **Next task:** User verification of both fixes in their browser. Then Projects (P1 item 3), same as Entry 10's next-task note.
+
+---
+
+## Entry 12 — 2026-08-09 — Claude Code (Sonnet 5)
+
+**Role:** Builder (CRM slice, real Philippine cascading address data)
+
+**Objective:** User asked for real cascading Province -> City -> Barangay dropdowns with postal-code auto-fill (explicit example: Cavite -> Kawit/Imus/General Trias/Tanza -> Tabon I/Tabon II), and asked for "similar practice" for other countries.
+
+**Scope-setting (before writing code):** Flagged clearly that hand-authoring a ~42,000-barangay database from memory was not something to attempt — wrong data presented as authoritative would be worse than the existing free-text fields. Checked npm for real, community-maintained packages instead of fabricating. Confirmed the user's own example against real data *before* proposing anything (see below) rather than assuming a package was trustworthy from its README alone. Asked the user to scope this explicitly rather than silently deciding: they chose PH-real-data-now, other-countries-stay-as-is (a global equivalent would need a paid address-autocomplete API like Google Places — flagged as a separate future decision, not attempted here).
+
+**What was verified before adopting:**
+- `psgc` (PSA Standard Geographic Code data, MIT, zero deps): queried it directly — Cavite's municipality list includes Kawit, Imus, General Trias, Tanza (user's exact example); Kawit's barangay list includes "Tabon I" and "Tabon II" (user's exact example, including the numbering style).
+- `use-postal-ph` (postal codes per municipality, MIT): Kawit's postal code returned as 4104, which matches public record (general knowledge check, not just trusting the package).
+
+**Implementation:**
+- `src/lib/ph-address.ts` — thin wrapper: `getPhProvinces()`, `getPhMunicipalities(province)`, `getPhBarangays(province, municipality)` (matched by name AND province, since some municipality names repeat across provinces — e.g. "San Fernando" — and the flat `municipalities.filter()` API alone can't disambiguate), `getPhPostalCode(municipality)`.
+- `src/components/address-fields.tsx` — rewritten: when country === "PH", renders real cascading `<select>`s (Province -> City/Municipality -> Barangay) with postal code auto-fill on municipality change (still editable, in case of override); every other country keeps the existing free-text fields with adaptive labels from Entry 11 unchanged. The PSGC module is dynamically `import()`-ed only when PH is selected — confirmed via build output that it lands in its own ~2.8MB chunk, not the shared bundle every visitor downloads.
+- 6 new tests in `src/lib/ph-address.test.ts`, directly encoding the user's own example as the regression check (Cavite/Kawit/Tabon I+II/4104) plus a province-mismatch edge case and a not-found case.
+- Two lint fixes surfaced by this work (not suppressed): `use-postal-ph`'s exported factory function is literally named `usePostalPH`, which eslint's `react-hooks/rules-of-hooks` flags as a hook by naming convention even though it isn't one — renamed on import (`createPostalPhClient`) rather than disabling the rule. Also fixed a genuine `setState`-in-effect anti-pattern in the loading-state logic (derived `phLoading` from existing state instead of a redundant `useState`).
+- `docs/integrations/DEPENDENCY_REGISTRY.md` — new row for both packages, including the explicit caveat that only the user's own example was individually spot-checked, not all ~1,600 municipalities.
+
+**Files changed:** `src/lib/ph-address.ts` (new), `src/lib/ph-address.test.ts` (new), `src/components/address-fields.tsx` (rewritten), `package.json`/`bun.lock` (added `psgc`, `use-postal-ph`), `docs/integrations/DEPENDENCY_REGISTRY.md`.
+
+**Tests:** `bun run test` (43/43, up from 37), `bunx tsc --noEmit`, `bun run lint`, `bun run build` all clean. Confirmed via `.next/static/chunks` inspection that the PSGC data landed in an isolated chunk (lazy-loaded), not the main bundle.
+
+**Privacy/security impact:** None new — static reference data bundled at build time, no new external calls or data flows. `billingSubLocality`/`billingCity`/`billingStateProvince`/`billingPostalCode` are still plain text columns server-side (no new validation added there beyond what Entry 11 already has) — the cascading UI makes it *easier* to enter correct PH data but doesn't enforce it came from the dropdown (a user could still submit arbitrary text via a non-JS client or by editing the DOM; not a new risk, this was already true for every field).
+
+**Unresolved risk / known limitations:**
+- Only the user's own example (Cavite/Kawit) was individually verified against real-world knowledge. The other ~1,600 PH municipalities' data is trusted from the upstream package, not independently checked one by one — realistic given the scale, but worth knowing if a user ever reports a specific wrong barangay or postal code.
+- Postal codes are per-municipality, not per-barangay (matches how Philippine ZIP codes actually work in most cases — a few very large cities like Manila have district-level codes the auto-fill won't capture correctly, but the field stays editable).
+- Global "similar practice" for other countries is explicitly NOT built — user chose to defer that, and it would need a paid API (Google Places Autocomplete or similar), a separate vendor decision.
+- Everything else carried over from Entry 11 unchanged.
+
+**Device/browser impact:** Not yet verified by the user in a real browser. Recommend: pick Philippines as country, confirm Province -> City -> Barangay cascades correctly and postal code auto-fills (try Cavite -> Kawit specifically, matching the original example), then confirm switching back to a non-PH country (e.g. United States) correctly reverts to the free-text State/ZIP fields.
+
+**Next task:** User verification of the PH cascading address flow. Then Projects (P1 item 3), same as prior entries' next-task note.

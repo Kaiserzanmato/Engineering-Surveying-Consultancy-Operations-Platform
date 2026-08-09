@@ -120,6 +120,25 @@ Per `/TECHNICAL_ARCHITECTURE.md` §11 and `/AGENTS.md` Phase M. Every runtime de
 | Exit/migration plan | Provider abstraction layer is the exit plan — no direct vendor lock-in by design |
 | Status | **Not yet proposed for provisioning — do not enable until `docs/ai/AI_INVENTORY.md` exists and P1 core workflow is stable** |
 
+## Philippine geographic/postal data (npm packages, not a hosted service)
+
+| Field | Value |
+|---|---|
+| Vendor/service | `psgc` (npm, MIT, no deps) — community package bundling the Philippine Statistics Authority's Standard Geographic Code data (region/province/city-municipality/barangay hierarchy, 42,036 barangays). `use-postal-ph` (npm, MIT) — postal codes per municipality. |
+| Purpose | Real cascading Province -> City/Municipality -> Barangay dropdowns with postal-code auto-fill for `clients.billing*` fields when the Philippines is selected as billing country — see `src/lib/ph-address.ts`, `src/components/address-fields.tsx`. |
+| Data processed | No user/client data sent anywhere — this is static reference data bundled into the app, not an API call. |
+| Region | N/A — client-side static data, lazy-loaded (own ~2.8MB chunk, only fetched when "Philippines" is selected). |
+| Authentication | N/A |
+| Permissions | N/A |
+| SLA | None — not a live service. Risk is data staleness (barangay boundaries/postal codes can change), not availability. |
+| Rate limits | N/A |
+| Security/privacy docs | https://github.com/pcofilada/psgc, https://github.com/blckclov3r/use-postal-ph |
+| Subprocessors | N/A |
+| Cost | Free |
+| Fallback | If either package is abandoned/inaccurate, the country falls back to the generic free-text city/state/postal fields (same as every other country) — no hard dependency. |
+| Exit/migration plan | Just remove the packages and the PH-specific branch in `AddressFields`; falls back to generic fields automatically. |
+| Status | **Installed 2026-08-09.** Verified against the user's own example before adoption (Cavite -> Kawit -> "Tabon I"/"Tabon II" barangays; Kawit's postal code 4104 matches public record) — not blindly trusted, spot-checked. Data accuracy for the other ~1,600 municipalities not individually verified; flag if a user reports a wrong barangay/postal code so it can be traced to the upstream package. |
+
 ---
 
 ## Process notes
