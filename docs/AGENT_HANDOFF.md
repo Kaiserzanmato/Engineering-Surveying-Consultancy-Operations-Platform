@@ -248,3 +248,38 @@ Coordination log for multi-tool agentic engineering (Claude Code, Codex, Antigra
 - No in-app invite flow (gap 4).
 
 **Next task:** Per `docs/IMPLEMENTATION_PLAN.md` §2, P1 item 2 — CRM/Intake (leads, qualification, client profile, contacts) — pending user go-ahead.
+
+---
+
+## Entry 9 — 2026-08-09 — Claude Code (Sonnet 5)
+
+**Role:** Builder (CRM/Intake vertical slice)
+
+**Objective:** User said "start now" on CRM/Intake, the next item in `AGENTS.md` Phase F's feature order.
+
+**Files changed (high level — see git log for the full diff):**
+- `src/db/schema.ts` — added `service_types`, `leads` (with `lead_status` enum: new/contacted/qualified/disqualified/converted), `clients` (`client_type`, `client_status` enums), `contacts`. `leads.convertedClientId` is deliberately NOT a FK (avoids a circular constraint with `clients.sourceLeadId`, which IS the authoritative direction).
+- `scripts/seed.ts` — added `leads:read`, `leads:manage`, `clients:read`, `clients:manage`, `service_types:manage` permissions and grants per PRD §12's CRM rows, with judgment calls documented inline for the matrix's ambiguous "Assigned"/"Limited"/"Full/Assigned" entries.
+- `src/lib/crm/leads.ts` — pure helpers: `hasUnscopedLeadAccess`, `leadInScope` (the scoping rule for `administrative_staff`), `canTransitionLeadStatus` (the status state machine). Pulled out of the "use server" actions file specifically so they're unit-testable (Next.js Server Action files can only export async functions).
+- `src/app/(app)/crm/leads/actions.ts`, `src/app/(app)/crm/clients/actions.ts` — createLead, updateLeadDetails, changeLeadStatus, claimLead, assignLead, convertLeadToClient; createClient, updateClient, createContact, updateContact. All `authorize()`-gated, audit-logged.
+- `src/app/(app)/crm/leads/page.tsx` + `[id]/page.tsx`, `src/app/(app)/crm/clients/page.tsx` + `[id]/page.tsx` — list/detail UI.
+- `src/app/(app)/admin/service-types/` — minimal catalog admin (list + create only, no edit/delete yet). Deliberately ships with zero seeded service types — Point View's actual service catalog isn't documented anywhere in the PRD/proposal, so this wasn't guessed.
+- `src/lib/crm/leads.test.ts` — 14 new unit tests (scoping logic, status transition state machine).
+- **Route restructure**: moved `dashboard/`, `admin/`, and the new `crm/` under a `(app)` route group with one shared `layout.tsx` (auth check + MFA gate + nav). Fixes a real gap: `/admin/users` previously had no nav bar at all (it was a separate route tree from `/dashboard`, so didn't inherit that layout) — the user's own screenshot of `/admin/users` showed this. Route group syntax means URLs are unchanged (`/admin/users` still resolves the same), confirmed via production build output listing the same routes as before.
+- Docs: `docs/security/RBAC_MATRIX.md`, `docs/privacy/DATA_MAP.md`, `docs/security/THREAT_MODEL.md`, `docs/IMPLEMENTATION_PLAN.md` all updated.
+
+**A correction made mid-slice:** Initially wrote `leadInScope` as a manual sequential check after `authorize()` (`const actor = await authorize(...); if (!leadInScope(before, actor)) throw ...`), which technically worked but bypassed the `authorize()` function's own `resourceInScope` parameter — the exact mechanism it was built for. Refactored `updateLeadDetails`, `changeLeadStatus`, and `convertLeadToClient` to fetch the lead first, then call `authorize("leads:manage", { resourceInScope: (user) => leadInScope(before, user) })`, so the documented architecture (single `authorize()` call is the actual enforcement point) matches what the code does. `claimLead` and `assignLead` intentionally don't use `leadInScope` — they have their own distinct rules (claim requires unassigned; reassign requires unscoped access).
+
+**Tests:** `bun run test` (25/25, up from 11), `bunx tsc --noEmit`, `bun run lint`, `bun run build` all clean. Manual dev-server smoke test: unauthenticated requests to all new routes correctly redirect (one transient 404 on first Turbopack compile of `/crm/leads`, resolved on retry — not a real issue, noted here in case it recurs and looks alarming).
+
+**Privacy/security impact:** This is the first slice that stores personal data about people *outside* the organization (lead and client contact info) — see the updated `docs/privacy/DATA_MAP.md` and `docs/security/THREAT_MODEL.md` §3 Assets. No new privacy controls beyond what RBAC already provides (no PII-specific export/deletion tooling yet — still covered by the general "no deletion code path exists yet" gap already tracked). Deliberately did not invent a service catalog — real data has to come from the client.
+
+**Unresolved risk:**
+- No deletion/export code path for leads or clients (data-subject rights support from PRD §7 §7.5 — not built anywhere yet, tracked generally, not CRM-specific).
+- The "Full/Assigned" and "Assigned" PRD §12 ambiguities for Clients (Admin Staff, Field/CAD/Reviewer) were resolved as documented judgment calls, not confirmed with the client — see `docs/security/RBAC_MATRIX.md`.
+- No lead deduplication — creating a lead with the same contact info as an existing one is currently unguarded.
+- Everything carried over from Entry 5–8 unchanged (rate limiting, MFA, audit log viewer, invite flow).
+
+**Device/browser impact:** Not yet manually verified in a real browser (unlike identity/RBAC, which the user walked through end-to-end). Dev-server curl smoke tests only. Recommend the user click through `/crm/leads` → create a lead → qualify → convert → `/crm/clients` at least once before considering this slice fully verified, the same way identity/RBAC was.
+
+**Next task:** User verification of the CRM flow in a real browser. After that, per `docs/IMPLEMENTATION_PLAN.md` §2, Projects (P1 item 3) is next — and is the slice that will finally give the `resourceInScope` mechanism a second, project-membership-shaped case to prove itself against.

@@ -65,6 +65,18 @@ async function main() {
     { key: "users:read", description: "View the user list and their assigned roles." },
     { key: "users:manage_roles", description: "Assign or revoke roles for a user." },
     { key: "users:suspend", description: "Suspend or reactivate a user account." },
+    { key: "leads:read", description: "View leads." },
+    {
+      key: "leads:manage",
+      description:
+        "Create/edit/qualify/convert leads. For administrative_staff this is enforced scoped to assigned leads only (resourceInScope check in src/app/crm/leads/actions.ts), per PRD §12's 'Assigned' access level — everyone else granted this key has unscoped access.",
+    },
+    { key: "clients:read", description: "View clients and their contacts." },
+    { key: "clients:manage", description: "Create/edit clients and their contacts." },
+    {
+      key: "service_types:manage",
+      description: "Manage the service catalog (used to classify leads/service requests).",
+    },
   ];
 
   await db.insert(schema.roles).values(roles).onConflictDoNothing();
@@ -78,11 +90,52 @@ async function main() {
   // high-risk actions in PRD §8, and self-escalation risk argues for the
   // narrower reading until the client confirms otherwise (PRD §12: "Final
   // permissions require client validation before production").
+  // PRD §12 CRM rows: "Leads: SysAdmin=Full, Owner/GM=Full, Admin=Assigned,
+  // Field/CAD/Reviewer=No, Finance=Limited, Sales=Full." "Clients:
+  // SysAdmin=Full, Owner/GM=Full, Admin=Full/Assigned, Field/CAD/Reviewer=
+  // Assigned, Finance=Limited, Sales=Assigned." Judgment calls made here
+  // (flag for client validation per PRD §12):
+  // - "Limited" (Finance) read as leads:read/clients:read only, no manage —
+  //   consistent with the Users/Roles "Limited" reading above.
+  // - Field/CAD/Reviewer's "Assigned" on Clients has no assignment
+  //   mechanism to scope against yet (no client-membership concept exists),
+  //   so it's read as "No" for now rather than granting unscoped access —
+  //   revisit once Projects/assignment exists and can properly scope this.
+  // - Admin Staff's "Assigned" on Leads IS scoped (assignedTo check in the
+  //   server action); Clients' "Full/Assigned" is granted as full manage
+  //   since there's no client-assignment table to scope against either.
+  // - Sales' "Assigned" on Clients is granted as full manage — they're the
+  //   role that converts leads into clients, so needs real create/update power.
   const grants: (typeof schema.rolePermissions.$inferInsert)[] = [
     { roleSlug: "system_administrator", permissionKey: "users:read" },
     { roleSlug: "system_administrator", permissionKey: "users:manage_roles" },
     { roleSlug: "system_administrator", permissionKey: "users:suspend" },
     { roleSlug: "owner_gm", permissionKey: "users:read" },
+
+    { roleSlug: "system_administrator", permissionKey: "leads:read" },
+    { roleSlug: "system_administrator", permissionKey: "leads:manage" },
+    { roleSlug: "system_administrator", permissionKey: "clients:read" },
+    { roleSlug: "system_administrator", permissionKey: "clients:manage" },
+    { roleSlug: "system_administrator", permissionKey: "service_types:manage" },
+
+    { roleSlug: "owner_gm", permissionKey: "leads:read" },
+    { roleSlug: "owner_gm", permissionKey: "leads:manage" },
+    { roleSlug: "owner_gm", permissionKey: "clients:read" },
+    { roleSlug: "owner_gm", permissionKey: "clients:manage" },
+    { roleSlug: "owner_gm", permissionKey: "service_types:manage" },
+
+    { roleSlug: "administrative_staff", permissionKey: "leads:read" },
+    { roleSlug: "administrative_staff", permissionKey: "leads:manage" },
+    { roleSlug: "administrative_staff", permissionKey: "clients:read" },
+    { roleSlug: "administrative_staff", permissionKey: "clients:manage" },
+
+    { roleSlug: "finance_billing", permissionKey: "leads:read" },
+    { roleSlug: "finance_billing", permissionKey: "clients:read" },
+
+    { roleSlug: "sales_client_intake", permissionKey: "leads:read" },
+    { roleSlug: "sales_client_intake", permissionKey: "leads:manage" },
+    { roleSlug: "sales_client_intake", permissionKey: "clients:read" },
+    { roleSlug: "sales_client_intake", permissionKey: "clients:manage" },
   ];
 
   await db.insert(schema.rolePermissions).values(grants).onConflictDoNothing();

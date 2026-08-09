@@ -6,6 +6,7 @@ import {
   jsonb,
   uuid,
   pgEnum,
+  boolean,
 } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 
@@ -123,4 +124,108 @@ export const rolePermissionsRelations = relations(rolePermissions, ({ one }) => 
     fields: [rolePermissions.permissionKey],
     references: [permissions.key],
   }),
+}));
+
+// ---------------------------------------------------------------------------
+// CRM / Intake — PRD §17 CRM/Client Management, §18 data model, §13 workflow
+// (Inquiry -> Qualification -> Client -> Project). Project itself is a later
+// slice; clients.sourceLeadId / leads.convertedClientId are the seam that
+// slice will build on ("Related projects" from PRD §17 attaches to Client).
+// ---------------------------------------------------------------------------
+
+// Point View's actual service catalog is real business data this repo has
+// no source for (not enumerated anywhere in PRD/TECHNICAL_ARCHITECTURE) —
+// this table exists so a System Administrator/Owner can populate it
+// themselves via /admin/service-types, not pre-seeded with invented names.
+export const serviceTypes = pgTable("service_types", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull().unique(),
+  description: text("description"),
+  active: boolean("active").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const leadStatusEnum = pgEnum("lead_status", [
+  "new",
+  "contacted",
+  "qualified",
+  "disqualified",
+  "converted",
+]);
+
+export const leads = pgTable("leads", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  companyName: text("company_name"),
+  contactName: text("contact_name").notNull(),
+  contactEmail: text("contact_email"),
+  contactPhone: text("contact_phone"),
+  serviceTypeId: uuid("service_type_id").references(() => serviceTypes.id, {
+    onDelete: "set null",
+  }),
+  serviceRequestNotes: text("service_request_notes"),
+  location: text("location"),
+  source: text("source"),
+  status: leadStatusEnum("status").notNull().default("new"),
+  qualificationNotes: text("qualification_notes"),
+  assignedTo: text("assigned_to").references(() => users.id, { onDelete: "set null" }),
+  createdBy: text("created_by")
+    .notNull()
+    .references(() => users.id, { onDelete: "restrict" }),
+  // Informational only, no FK constraint — clients.sourceLeadId (below) is
+  // the authoritative direction of this relationship, avoiding a circular
+  // FK between leads and clients.
+  convertedClientId: uuid("converted_client_id"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const clientTypeEnum = pgEnum("client_type", ["individual", "company"]);
+export const clientStatusEnum = pgEnum("client_status", ["active", "inactive"]);
+
+export const clients = pgTable("clients", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull(),
+  clientType: clientTypeEnum("client_type").notNull(),
+  billingAddress: text("billing_address"),
+  status: clientStatusEnum("status").notNull().default("active"),
+  sourceLeadId: uuid("source_lead_id").references(() => leads.id, { onDelete: "set null" }),
+  createdBy: text("created_by")
+    .notNull()
+    .references(() => users.id, { onDelete: "restrict" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const contacts = pgTable("contacts", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  clientId: uuid("client_id")
+    .notNull()
+    .references(() => clients.id, { onDelete: "cascade" }),
+  firstName: text("first_name").notNull(),
+  lastName: text("last_name"),
+  email: text("email"),
+  phone: text("phone"),
+  title: text("title"),
+  isPrimary: boolean("is_primary").notNull().default(false),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const leadsRelations = relations(leads, ({ one }) => ({
+  serviceType: one(serviceTypes, {
+    fields: [leads.serviceTypeId],
+    references: [serviceTypes.id],
+  }),
+  assignedUser: one(users, { fields: [leads.assignedTo], references: [users.id] }),
+  createdByUser: one(users, { fields: [leads.createdBy], references: [users.id] }),
+}));
+
+export const clientsRelations = relations(clients, ({ one, many }) => ({
+  sourceLead: one(leads, { fields: [clients.sourceLeadId], references: [leads.id] }),
+  createdByUser: one(users, { fields: [clients.createdBy], references: [users.id] }),
+  contacts: many(contacts),
+}));
+
+export const contactsRelations = relations(contacts, ({ one }) => ({
+  client: one(clients, { fields: [contacts.clientId], references: [clients.id] }),
 }));
