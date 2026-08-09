@@ -48,20 +48,20 @@ Per `/TECHNICAL_ARCHITECTURE.md` §11 and `/AGENTS.md` Phase M. Every runtime de
 
 | Field | Value |
 |---|---|
-| Vendor/service | Managed PostgreSQL (e.g., Neon via Vercel Marketplace) — exact vendor TBD |
+| Vendor/service | Neon Postgres via Vercel Marketplace — resource `neon-chestnut-pocket` |
 | Purpose | Primary structured data store: users, RBAC, projects, workflow state, audit/security events, retention metadata |
-| Data processed | Personal data (client/employee), project data, audit evidence — classify per `docs/privacy/DATA_MAP.md` once drafted |
-| Region | TBD — data-residency confirmation required first |
-| Authentication | Connection-string/credential via secret manager, not committed |
-| Permissions | Application service role only; no shared superuser in app runtime |
-| SLA | Vendor-dependent — confirm before production |
-| Rate limits | Connection pool limits per plan |
-| Security/privacy docs | Vendor-specific — attach once selected |
-| Subprocessors | Vendor-dependent — document once selected |
-| Cost | Plan-dependent |
+| Data processed | Personal data (client/employee), project data, audit evidence — classify per `docs/privacy/DATA_MAP.md` |
+| Region | AWS `us-east-1` — **provisioned before data-residency requirement was confirmed; may need a new project in the correct region once the Philippine DPA residency question is answered** (same open question as the Blob store) |
+| Authentication | `DATABASE_URL` / `DATABASE_URL_UNPOOLED` / `PG*` / `POSTGRES_*` env vars, auto-provisioned into `.env.local` (gitignored) — never committed |
+| Permissions | Default Neon role from provisioning; scope down to an app-specific least-privilege role before the identity/RBAC slice ships |
+| SLA | Neon's Vercel Marketplace plan tier |
+| Rate limits | Connection pool limits per plan (pooled `DATABASE_URL` provided) |
+| Security/privacy docs | https://neon.tech/privacy-policy, https://neon.tech/terms-of-service |
+| Subprocessors | Neon (AWS-hosted) |
+| Cost | Plan-dependent — monitor via Vercel billing |
 | Fallback | Self-hosted Postgres if managed option is rejected |
 | Exit/migration plan | Standard `pg_dump`/logical replication — Postgres is not proprietary |
-| Status | **Install started 2026-08-09, blocked on marketplace terms acceptance** — `vercel integration add neon --no-claim` requires the account owner to accept terms in-browser: https://vercel.com/oliveripsioco-3103s-projects/~/integrations/accept-terms/neon?source=cli — then retry the same command. Region/residency still open, see IMPLEMENTATION_PLAN §1. |
+| Status | **Provisioned 2026-08-09 — region needs revisiting pending residency confirmation; no schema exists yet** |
 
 ## Private object storage
 
@@ -86,20 +86,20 @@ Per `/TECHNICAL_ARCHITECTURE.md` §11 and `/AGENTS.md` Phase M. Every runtime de
 
 | Field | Value |
 |---|---|
-| Vendor/service | Clerk (native Vercel Marketplace integration, supports MFA) |
+| Vendor/service | Clerk via Vercel Marketplace — resource `clerk-orange-bucket` |
 | Purpose | Login, session management, MFA for System Administrator (mandatory) and privileged roles (recommended) per PRD §8 |
 | Data processed | Credentials, session tokens, MFA enrollment data — highly sensitive |
-| Region | TBD |
-| Authentication | N/A (this is the auth layer itself) |
-| Permissions | Admin console access restricted to System Administrator role |
-| SLA | Vendor-dependent |
-| Rate limits | Login attempt / brute-force protection must be confirmed as a vendor feature or built at app layer |
-| Security/privacy docs | Attach once selected |
-| Subprocessors | Attach once selected |
+| Region | Not yet confirmed — check Clerk instance settings in its dashboard before production; not exposed via the provisioned env vars |
+| Authentication | `CLERK_SECRET_KEY` / `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, auto-provisioned into `.env.local` (gitignored) |
+| Permissions | Admin console access restricted to System Administrator role (to be enforced once RBAC exists — Clerk dashboard access itself should also be restricted to authorized engineers only) |
+| SLA | Clerk's Vercel Marketplace plan tier |
+| Rate limits | Confirm Clerk's built-in brute-force/login-attempt protection is enabled in its dashboard before relying on it |
+| Security/privacy docs | https://clerk.com/legal/privacy, https://clerk.com/legal/terms |
+| Subprocessors | Clerk |
 | Cost | Plan-dependent, typically per-MAU |
 | Fallback | Self-hosted auth (e.g., NextAuth + Postgres) if managed vendor rejected — higher engineering burden for MFA/session security |
-| Exit/migration plan | Confirm user-export capability before adoption — auth vendor lock-in is high-risk to migrate later |
-| Status | **Install started 2026-08-09, blocked on marketplace terms acceptance** — `vercel integration add clerk --no-claim` requires the account owner to accept terms in-browser: https://vercel.com/oliveripsioco-3103s-projects/~/integrations/accept-terms/clerk?source=cli — then retry the same command. This is the highest-risk vendor choice to get wrong (auth), so double-check MFA configuration for System Administrator at provisioning time. |
+| Exit/migration plan | Confirm user-export capability before real users are created — auth vendor lock-in is high-risk to migrate later |
+| Status | **Provisioned 2026-08-09 — MFA is NOT yet configured/enforced; must be enabled for System Administrator (mandatory per PRD §8) before the identity/RBAC slice is considered done. No app-side integration code exists yet.** |
 
 ## AI provider (proposed, OFF by default)
 

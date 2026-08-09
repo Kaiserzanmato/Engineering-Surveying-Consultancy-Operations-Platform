@@ -72,3 +72,31 @@ Coordination log for multi-tool agentic engineering (Claude Code, Codex, Antigra
 **Device/browser impact:** N/A — no UI beyond the default Next.js starter page exists yet.
 
 **Next task:** Once the user accepts the two marketplace terms links above, provision Neon + Clerk, run `vercel env pull --yes` to sync the new env vars, then begin the Identity/RBAC vertical slice (first item in `AGENTS.md` Phase F feature order) — schema, server-side authorization function (the ALLOW rule from `TECHNICAL_ARCHITECTURE.md` §5.3), and its negative security tests, per `docs/IMPLEMENTATION_PLAN.md` §2 P1 list item 1.
+
+---
+
+## Entry 3 — 2026-08-09 — Claude Code (Sonnet 5)
+
+**Role:** Builder (P0 scaffolding, continued)
+
+**Objective:** User accepted both marketplace terms (Neon, Clerk); finish provisioning.
+
+**Files changed:**
+- Ran `vercel integration add neon --no-claim` — provisioned Neon Postgres resource `neon-chestnut-pocket`, region **AWS `us-east-1`**. Auto-connected to the Vercel project; `DATABASE_URL`/`DATABASE_URL_UNPOOLED`/`PG*`/`POSTGRES_*` env vars pulled into `.env.local` (gitignored).
+- Ran `vercel integration add clerk --no-claim` — provisioned Clerk resource `clerk-orange-bucket`. `CLERK_SECRET_KEY`/`NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` pulled into `.env.local`. Clerk's own region is not exposed via env vars — check its dashboard before production if residency matters.
+- Updated `docs/integrations/DEPENDENCY_REGISTRY.md` rows for both to "Provisioned" with actual resource names/regions.
+
+**Tests:** None — no app code touches these yet.
+
+**Privacy/security impact:**
+- Neon landed in `us-east-1`, same US-East region family as the Blob store (`iad1`) — at least internally consistent, but neither is Philippines/APAC. Residency question (`docs/privacy/DATA_MAP.md` open question 1) is still open and now blocks three provisioned resources, not one, if the answer turns out to require in-region hosting.
+- Clerk's default Neon connection role and MFA are **not yet configured**. MFA for System Administrator is mandatory per PRD §8 and must be enabled in Clerk's dashboard before the identity/RBAC slice is considered done — not automatic from provisioning alone.
+
+**Unresolved risk:**
+- Data residency still unanswered — now affects Neon, Blob, and (unconfirmed) Clerk regions.
+- Neon's default database role is not yet scoped to least-privilege for the app runtime.
+- Clerk MFA is not yet enabled/enforced for any role.
+
+**Device/browser impact:** N/A.
+
+**Next task:** Identity/RBAC vertical slice — Drizzle (or equivalent) schema against Neon, Clerk SDK integration (`@clerk/nextjs`) with MFA enabled for System Administrator in Clerk's dashboard, the single server-side authorization function implementing the ALLOW rule (`TECHNICAL_ARCHITECTURE.md` §5.3), and negative authorization tests, per `docs/IMPLEMENTATION_PLAN.md` §2 P1 item 1 and `AGENTS.md` Phase F's ten-step slice checklist.
