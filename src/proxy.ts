@@ -1,34 +1,37 @@
-import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
+import { clerkMiddleware } from "@clerk/nextjs/server";
 
-// NOTE: @clerk/nextjs 7.7.1 logs a deprecation warning for
-// createRouteMatcher, recommending resource-based auth checks (in each
-// page/layout/route) instead of middleware path-matching, since matcher
-// patterns can diverge from actual Next.js routing. That's already how
-// this app is built: src/lib/auth/authorize.ts is the real enforcement
-// point, called directly in every protected layout/page/action (deny by
-// default, per TECHNICAL_ARCHITECTURE.md §5.3). This middleware layer is
-// intentionally kept as defense-in-depth on top of that, not the sole
-// gate — but if Clerk removes createRouteMatcher in a future major
-// version, this file will need migrating off it. Tracked in
-// docs/security/THREAT_MODEL.md.
-
-// Deny-by-default per TECHNICAL_ARCHITECTURE.md §5.3 — everything requires
-// an authenticated session except the explicit public routes below. The
-// Clerk webhook route authenticates via svix signature verification
-// instead of a session (see src/app/api/webhooks/clerk/route.ts), so it
-// stays public here but is not actually unauthenticated.
+// This used to also call auth.protect() here (gated by createRouteMatcher),
+// but that caused a real production bug: on Clerk's development instance
+// (no production domain configured yet — see
+// docs/integrations/DEPENDENCY_REGISTRY.md), the "dev browser" cookie
+// handshake that lets a signed-in user's *top-level navigations* pass
+// auth.protect() does not reliably propagate to same-origin RSC prefetch/
+// revalidation fetches (the requests Next.js's own router makes in the
+// background after a Server Action, or when hovering a <Link>). Those
+// fetches got rewritten to a static 404 page even for a fully signed-in
+// user, so Server Action mutations succeeded server-side but the page
+// never visibly refreshed to show it — clicks looked broken when they
+// weren't.
 //
-// No public /sign-up route: this is an internal operations platform (PRD
-// §1), not a self-service product. Accounts are provisioned by a System
-// Administrator (Clerk invitation), and a new user has zero roles/local
-// permissions until explicitly assigned one via /admin/users — so even if
-// self-serve sign-up is ever re-enabled at the Clerk instance level, a
-// self-registered account is inert by default, not merely unauthenticated.
-const isPublicRoute = createRouteMatcher(["/", "/sign-in(.*)", "/api/webhooks/clerk"]);
-
-export default clerkMiddleware(async (auth, req) => {
-  if (!isPublicRoute(req)) await auth.protect();
-});
+// clerkMiddleware() alone (no protect() calls) still does what pages need
+// from it: establishing request-scoped Clerk context so auth()/
+// currentUser() work correctly in Server Components and Actions. The
+// actual enforcement — deny by default, per TECHNICAL_ARCHITECTURE.md
+// §5.3 — lives entirely in src/lib/auth/authorize.ts, called by every
+// protected layout/page/action. This isn't a downgrade: it's exactly what
+// Clerk's own deprecation notice on createRouteMatcher recommends
+// (resource-based checks over middleware path-matching), and it was
+// already true that authorize() was the real gate, not this file — see
+// the removed comment's own note that this layer was "defense-in-depth,
+// not the sole gate." The bug this caused (this file rewriting Next's own
+// internal traffic to 404 for signed-in users) outweighs the marginal
+// defense-in-depth value.
+//
+// Revisit once a production domain is configured (docs/security/
+// THREAT_MODEL.md gap 5's sibling issue) — the dev-browser limitation
+// goes away with a real production Clerk instance, at which point
+// middleware-level protect() could be safely reintroduced if desired.
+export default clerkMiddleware();
 
 export const config = {
   matcher: [
