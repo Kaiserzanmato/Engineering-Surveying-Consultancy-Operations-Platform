@@ -529,3 +529,50 @@ Built `src/lib/countries.ts` (full ISO 3166-1 English short-name list, public st
 **Deployment status:** Not deployed — same as Entry 15, no request to deploy was given, and this entry didn't touch the production database, RBAC grants, or the frontend build in a way that changes runtime behavior (test-only additions).
 
 **Next task:** Human review of the permission-split questions still open from Entry 15. If/when there's appetite to extend this test pattern to the other slices (Leads/Clients/Users), that's a reasonable next testing investment — otherwise, Workflow engine (P1 item 4) is still next per `docs/IMPLEMENTATION_PLAN.md`.
+
+---
+
+## Entry 17 — 2026-08-11 — Claude Code (Sonnet 5)
+
+**Role:** Builder/Security Tester — extending Entry 16's real-database RBAC integration testing pattern to every other currently-implemented authorization-sensitive area, per explicit user direction (a written task, `NEXT_TASK_EXTEND_DATABASE_LEVEL_RBAC_INTEGRATION_COVERAGE.md`) to close the remaining test-coverage gap before starting Workflow Engine.
+
+**Objective:** Entry 16 closed the "100% pure-unit, nothing hits a database" gap for Projects only. This entry does the same for Leads, Clients, Users/Roles, and adds a page/route-authorization layer (React Server Components, not just server actions) that didn't exist for *any* slice before today — Entry 15 flagged page-level authorization as having weaker coverage than server actions, and this closes that specifically too.
+
+**Scope discipline:** Per the task's explicit instructions, this was a testing pass, not a refactor — no production authorization behavior was changed unless a test revealed a genuine defect (none did — see Bugs below), and none of the standing open decisions (Administrative Staff `projects:manage_members`, Sales "Pre-project," VTA, Client-assignment scoping, MFA) were resolved or silently redefined.
+
+**Coverage added:**
+- `src/app/(app)/crm/leads/actions.integration.test.ts` — **19 tests**. Roles: System Administrator, Owner/GM (unblocked by assignment), Administrative Staff (assigned-scope: read/edit own, denied on others', self-assign on create, claim-unassigned-but-not-reassign, cannot bypass via direct action calls), Sales (unscoped full manage, but denied an unrelated privileged action — role assignment), Finance (read-only, denied manage/qualify/convert/assign), Field/CAD/Reviewer via `it.each` (no access at all). Security scenarios: qualified→converted requires both `leads:manage` in-scope AND `clients:manage` (denied when the latter's missing), guessed lead id denied not silently no-op'd, suspended user denied despite an otherwise-valid unscoped role, unknown/never-synced session denied, and a genuine race check — reassigning a lead away mid-flow immediately revokes the original assignee's next action (no stale scope).
+- `src/app/(app)/crm/clients/actions.integration.test.ts` — **14 tests**. Confirms rather than invents: Administrative Staff currently has **unscoped** `clients:manage` (can edit a client it didn't create) — this is the existing documented judgment call from the original CRM slice, now backed by a real test instead of just a code-reading argument. Also: System Administrator/Owner-GM/Sales full access, Finance denied everything including contact mutation, Field/CAD/Reviewer denied (no grant exists, PRD's "Assigned" has no mechanism to enforce), suspended-user and unknown-session denial, and an explicit "direct client ID access succeeds for any `clients:manage` holder" test that documents (not exploits) the absence of a scoping mechanism.
+- `src/app/(app)/admin/users/actions.integration.test.ts` — **17 tests**. Required mocking `clerkClient()` in addition to `auth()` — `setUserStatus` calls Clerk's real backend API (`banUser`/`unbanUser`) to revoke sessions on suspend, which must never fire against the real Clerk account from a test. Covers: System Administrator full CRUD + cannot suspend self; Owner/GM's conservative read-only reading (cannot assign/revoke/suspend) explicitly re-verified, not just asserted from the seed comment; every other role denied via `it.each`; last-System-Administrator-cannot-be-revoked (verified by first clearing extra sysadmins so the guard is genuinely exercised, not accidentally passing because two already existed); revoking succeeds when a second sysadmin exists (the guard's boundary, not just its trigger); self-escalation denied (a non-admin can't grant themselves `system_administrator`); a malformed/manipulated `roleSlug` payload is rejected, not silently accepted; cross-user escalation denied; a suspended System Administrator is denied protected actions (suspension isn't self-exempting); unknown session fails closed.
+- `src/app/(app)/page-authorization.integration.test.ts` — **7 tests**, the new layer. React Server Component page functions are plain async functions — calling them directly returns a React-element object graph (no jsdom needed) that can be walked by `type`/`key` to check exactly what would render, not just whether the call succeeded. Covers: a Projects member renders their project, a non-member gets a 404-digest rejection; **Leads list page's actual returned rows are inspected and confirmed to contain only the Administrative Staff viewer's own assigned lead** (not just "the query looks right in the source"); a lead assigned to someone else can't render but an unassigned one can (so it can be claimed); Clients list/detail correctly denied for a role with no `clients:read` grant, and correctly rendered for one that has it; Users/Admin page renders only for System Administrator/Owner-GM and 404s for everyone else; and — the most direct rebuttal of "only tested whether buttons are hidden" — **the actual `<select id="assign-role-...">` and `<form action={setUserStatus}>` elements are searched for in the tree** and confirmed present for System Administrator, absent for Owner/GM, rather than trusting the `canManageRoles`/`canSuspend` booleans by inspection alone.
+
+**Bugs found:** None in production code. One bug in a test itself, caught during authoring (not by a false-positive pass slipping through): an early draft of a Clients test reused a mocked-session pattern from Projects without re-verifying the "current user" was still correct after a helper call — same class of mistake Entry 16 already flagged and audited for, caught again here before the file was considered done by re-checking every `asUser()` call site against the preceding helper calls in each file.
+
+**Ambiguities found (explicitly NOT resolved, flagged for business review):** None new beyond what Entries 14-16 already listed. This pass's job was to test current behavior, not surface new open questions — the Clients-unscoped-access finding is a confirmation of an already-flagged ambiguity (`docs/security/RBAC_MATRIX.md`'s existing Interpretation notes), not a new one.
+
+**Files changed:** `src/app/(app)/crm/leads/actions.integration.test.ts` (new), `src/app/(app)/crm/clients/actions.integration.test.ts` (new), `src/app/(app)/admin/users/actions.integration.test.ts` (new), `src/app/(app)/page-authorization.integration.test.ts` (new), `TESTING.md` (new — one of `AGENTS.md` §6's required canonical docs, didn't exist before; describes the full test pyramid and how to extend it), `.github/workflows/ci.yml` (updated a now-stale header comment and the `test` job's display name — `bun run test` already picked up the new integration files with zero CI config changes needed, since PGlite has no external service dependency), `docs/security/RBAC_MATRIX.md` (new Test coverage table, Clients finding confirmation), `docs/IMPLEMENTATION_PLAN.md` (brief pointers from the Identity/RBAC and CRM/Intake entries to the new coverage).
+
+**Verification:**
+```
+lint: clean
+typecheck: clean (bunx next typegen && bunx tsc --noEmit)
+tests: 137/137 passing (up from 80 — +57 new: 19 leads, 14 clients, 17 users, 7 page-authorization), 11 test files (up from 7)
+production build: clean, same 13 routes as before — no production code changed
+```
+
+**Privacy/security impact:** None new to production — same as Entry 16, this is test-only infrastructure reusing the existing PGlite/mock harness. The one new mock (`clerkClient`) never makes a real network call; `hoisted.banUser`/`hoisted.unbanUser` are local `vi.fn()` stubs.
+
+**Remaining test gaps** (per the task's own required reporting):
+- This test pattern still doesn't cover Field Operations, Technical Processing, Review/Approval, Billing, Audit, or System Settings — because none of those features exist yet, not because of a coverage gap in what does exist.
+- Page-level tests cover Projects/Leads/Clients/Users but not full DOM rendering (no React Testing Library/jsdom) — only the server-side data-access/authorization path, per this task's own instruction to test that path specifically rather than rendered markup.
+- `docs/release/RELEASE_EVIDENCE.md` (`AGENTS.md` Phase Q) still does not exist — deliberately not created this pass; a partially-filled version now would overstate production readiness given the accessibility/compatibility/PIA gaps documented in `docs/security/THREAT_MODEL.md` §5. `TESTING.md` explicitly says so rather than leaving the gap unstated.
+- No security/accessibility/browser-smoke CI jobs exist yet (`.github/workflows/ci.yml`'s own header comment, updated but not resolved this pass).
+
+**Deployment status:** Not deployed — no request to deploy was given, and this task's own instruction explicitly prohibits it.
+
+```
+PRODUCTION DEPLOYMENT: NOT EXECUTED
+STATUS: Awaiting human review.
+```
+
+**Next task:** Awaiting human review of this pass, same standing questions as Entry 15/16 (Administrative Staff `projects:manage_members`, Sales "Pre-project," VTA, Client-assignment model, MFA/Clerk Pro). Workflow Engine (P1 item 4) is next per `docs/IMPLEMENTATION_PLAN.md` once review clears.
