@@ -85,7 +85,12 @@ async function main() {
     {
       key: "projects:manage",
       description:
-        "Create/edit project records and manage the assigned-team roster. For administrative_staff this is enforced scoped to projects they're a ProjectMember of (same resourceInScope mechanism as projects:read) — everyone else granted this key (system_administrator, owner_gm) has unscoped access.",
+        "Create/edit project records (project number, client, service type, location, status, stage, blocker, dates, billing-status text). For administrative_staff this is enforced scoped to projects they're a ProjectMember of (same resourceInScope mechanism as projects:read) — everyone else granted this key (system_administrator, owner_gm) has unscoped access. Does NOT include adding/removing project team members — see projects:manage_members.",
+    },
+    {
+      key: "projects:manage_members",
+      description:
+        "Add/remove ProjectMember rows (the assigned-team roster) — deliberately separate from projects:manage (RBAC review 2026-08-10): changing membership changes who is authorized to read/edit a project at all, so it's a narrower, independently-granted permission. Currently granted only to system_administrator/owner_gm (unscoped) — administrative_staff holds projects:manage but NOT this key, so a scoped project member can edit the project record but cannot alter who else is on it, per PRD §12's Projects row read literally now that ProjectMember gives a real mechanism to scope against (see src/lib/projects.ts's file-level comment).",
     },
   ];
 
@@ -129,6 +134,7 @@ async function main() {
     { roleSlug: "system_administrator", permissionKey: "service_types:manage" },
     { roleSlug: "system_administrator", permissionKey: "projects:read" },
     { roleSlug: "system_administrator", permissionKey: "projects:manage" },
+    { roleSlug: "system_administrator", permissionKey: "projects:manage_members" },
 
     { roleSlug: "owner_gm", permissionKey: "leads:read" },
     { roleSlug: "owner_gm", permissionKey: "leads:manage" },
@@ -137,6 +143,7 @@ async function main() {
     { roleSlug: "owner_gm", permissionKey: "service_types:manage" },
     { roleSlug: "owner_gm", permissionKey: "projects:read" },
     { roleSlug: "owner_gm", permissionKey: "projects:manage" },
+    { roleSlug: "owner_gm", permissionKey: "projects:manage_members" },
 
     { roleSlug: "administrative_staff", permissionKey: "leads:read" },
     { roleSlug: "administrative_staff", permissionKey: "leads:manage" },
@@ -144,6 +151,11 @@ async function main() {
     { roleSlug: "administrative_staff", permissionKey: "clients:manage" },
     { roleSlug: "administrative_staff", permissionKey: "projects:read" },
     { roleSlug: "administrative_staff", permissionKey: "projects:manage" },
+    // No projects:manage_members grant by default (RBAC review 2026-08-10)
+    // — see the permission's own description above and
+    // docs/security/RBAC_MATRIX.md. Flagged for Point View to confirm
+    // whether Administrative Staff should eventually get this for their
+    // assigned projects.
 
     { roleSlug: "finance_billing", permissionKey: "leads:read" },
     { roleSlug: "finance_billing", permissionKey: "clients:read" },

@@ -4,7 +4,12 @@ import { eq } from "drizzle-orm";
 import { authorize, AuthorizationError, getCurrentUser } from "@/lib/auth/authorize";
 import { getDb } from "@/db";
 import { projects, projectMembers, clients, serviceTypes, users, projectStatusEnum } from "@/db/schema";
-import { projectInScope, hasUnscopedProjectManage, PROJECT_STATUS_LABELS } from "@/lib/projects";
+import {
+  projectInScope,
+  projectMembersInScope,
+  hasUnscopedProjectManage,
+  PROJECT_STATUS_LABELS,
+} from "@/lib/projects";
 import { updateProject, addProjectMember, removeProjectMember } from "../actions";
 import { SubmitButton } from "@/components/submit-button";
 
@@ -44,6 +49,13 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
   const canManage =
     actor.permissions.has("projects:manage") &&
     (hasUnscopedProjectManage(actor) || memberUserIds.includes(actor.id));
+  // Separate from canManage (RBAC review 2026-08-10): editing the project
+  // record and administering who's on it are different authorization
+  // boundaries — see docs/security/RBAC_MATRIX.md's "Project membership
+  // administration" section and ../actions.ts's addProjectMember/
+  // removeProjectMember comments.
+  const canManageMembers =
+    actor.permissions.has("projects:manage_members") && projectMembersInScope(memberUserIds, actor);
 
   const [client, allClients, allServiceTypes, allUsers] = await Promise.all([
     db.select().from(clients).where(eq(clients.id, project.clientId)).then((r) => r[0]),
@@ -178,7 +190,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
           {members.map((m) => (
             <li key={m.userId} className="flex items-center justify-between py-2">
               <span>{m.name}</span>
-              {canManage && (
+              {canManageMembers && (
                 <form action={removeProjectMember}>
                   <input type="hidden" name="projectId" value={project.id} />
                   <input type="hidden" name="userId" value={m.userId} />
@@ -191,7 +203,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
           ))}
         </ul>
 
-        {canManage && nonMembers.length > 0 && (
+        {canManageMembers && nonMembers.length > 0 && (
           <form action={addProjectMember} className="mt-4 flex items-end gap-2 text-sm">
             <input type="hidden" name="projectId" value={project.id} />
             <label className="flex flex-col gap-1">

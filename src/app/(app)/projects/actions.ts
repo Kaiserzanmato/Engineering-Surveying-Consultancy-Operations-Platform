@@ -7,7 +7,12 @@ import { authorize } from "@/lib/auth/authorize";
 import { getDb } from "@/db";
 import { projects, projectMembers } from "@/db/schema";
 import { logAuditEvent } from "@/lib/audit";
-import { hasUnscopedProjectManage, projectInScope, parseProjectStatus } from "@/lib/projects";
+import {
+  hasUnscopedProjectManage,
+  projectInScope,
+  projectMembersInScope,
+  parseProjectStatus,
+} from "@/lib/projects";
 
 async function getProjectOrThrow(id: string) {
   const db = getDb();
@@ -34,7 +39,13 @@ export async function createProject(formData: FormData) {
   // No project exists yet to scope against — permission possession alone
   // gates creation, same as leads/clients createX actions. A scoped
   // manager (administrative_staff) is auto-added as a member immediately
-  // below so they aren't locked out of the record they just created.
+  // below so they aren't locked out of the record they just created. This
+  // is a bootstrap side-effect of CREATE, deliberately NOT routed through
+  // addProjectMember/projects:manage_members below — a scoped creator gets
+  // membership in the one project they just made, never the ability to
+  // add/remove members on that or any other project (RBAC review
+  // 2026-08-10: membership administration is now a separate permission
+  // from project creation/editing — see addProjectMember/removeProjectMember).
   const actor = await authorize("projects:manage");
   const db = getDb();
 
@@ -66,6 +77,18 @@ export async function createProject(formData: FormData) {
     after: project,
   });
 
+  // Not wrapped in a DB transaction: the neon-http driver used by this app
+  // does not support transactions (see src/db/index.ts and
+  // node_modules/drizzle-orm/neon-http/migrator.d.ts's own note) — the
+  // same pre-existing constraint every other multi-insert flow in this
+  // codebase already lives with (e.g. convertLeadToClient's sequential
+  // lead-update + client-insert). Safely ordered instead: the project row
+  // is committed first, so a crash between the two inserts leaves the
+  // project existing without its creator as a member — a fail-*safe*
+  // outcome (the creator is locked out of a project they made, an
+  // availability inconvenience they or an admin can fix by re-adding
+  // membership) rather than a fail-*open* one (nobody ends up with access
+  // they shouldn't have).
   if (!hasUnscopedProjectManage(actor)) {
     await db.insert(projectMembers).values({
       projectId: project.id,
@@ -132,9 +155,18 @@ export async function addProjectMember(formData: FormData) {
   const userId = String(formData.get("userId") ?? "").trim();
   if (!userId) throw new Error("Select a user to add");
 
+  // Gated on projects:manage_members, NOT projects:manage — RBAC review
+  // 2026-08-10: changing who is on a project's member roster changes who
+  // is authorized to read/edit that project at all, so it's a separate,
+  // narrower permission than ordinary project editing. administrative_staff
+  // holds projects:manage (scoped) but not projects:manage_members, so a
+  // scoped project member can edit the project record but cannot add or
+  // remove teammates, and — since permission_granted is checked before
+  // resourceInScope — cannot use this action to add themselves to an
+  // unrelated project either.
   const memberUserIds = await getMemberUserIds(projectId);
-  const actor = await authorize("projects:manage", {
-    resourceInScope: (user) => projectInScope(memberUserIds, user),
+  const actor = await authorize("projects:manage_members", {
+    resourceInScope: (user) => projectMembersInScope(memberUserIds, user),
   });
 
   if (memberUserIds.includes(userId)) return; // already a member, no-op
@@ -157,9 +189,10 @@ export async function removeProjectMember(formData: FormData) {
   const projectId = String(formData.get("projectId"));
   const userId = String(formData.get("userId") ?? "").trim();
 
+  // Same projects:manage_members gate as addProjectMember — see comment there.
   const memberUserIds = await getMemberUserIds(projectId);
-  const actor = await authorize("projects:manage", {
-    resourceInScope: (user) => projectInScope(memberUserIds, user),
+  const actor = await authorize("projects:manage_members", {
+    resourceInScope: (user) => projectMembersInScope(memberUserIds, user),
   });
 
   if (!memberUserIds.includes(userId)) return; // already removed, no-op

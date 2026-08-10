@@ -2,7 +2,9 @@ import { describe, it, expect } from "vitest";
 import {
   hasUnscopedProjectManage,
   hasUnscopedProjectRead,
+  hasUnscopedProjectManageMembers,
   projectInScope,
+  projectMembersInScope,
   parseProjectStatus,
 } from "./projects";
 import type { AuthorizedUser } from "@/lib/auth/authorize";
@@ -72,6 +74,45 @@ describe("projectInScope", () => {
     const user = makeUser({ roles: ["field_team_leader"] });
     expect(projectInScope(["someone_else"], user)).toBe(false);
     expect(projectInScope(["user_1"], user)).toBe(true);
+  });
+});
+
+describe("hasUnscopedProjectManageMembers", () => {
+  it("is true only for system_administrator and owner_gm", () => {
+    expect(hasUnscopedProjectManageMembers(makeUser({ roles: ["system_administrator"] }))).toBe(true);
+    expect(hasUnscopedProjectManageMembers(makeUser({ roles: ["owner_gm"] }))).toBe(true);
+  });
+
+  it("is false for administrative_staff, even though they hold projects:manage", () => {
+    expect(
+      hasUnscopedProjectManageMembers(
+        makeUser({ roles: ["administrative_staff"], permissions: new Set(["projects:read", "projects:manage"]) }),
+      ),
+    ).toBe(false);
+  });
+
+  it("is false for field/CAD/reviewer roles", () => {
+    expect(hasUnscopedProjectManageMembers(makeUser({ roles: ["field_team_leader"] }))).toBe(false);
+    expect(hasUnscopedProjectManageMembers(makeUser({ roles: ["cad_technical_operator"] }))).toBe(false);
+  });
+});
+
+describe("projectMembersInScope", () => {
+  it("allows system_administrator/owner_gm regardless of membership", () => {
+    const user = makeUser({ roles: ["system_administrator"] });
+    expect(projectMembersInScope([], user)).toBe(true);
+    expect(projectMembersInScope(["someone_else"], user)).toBe(true);
+  });
+
+  it("denies administrative_staff even when they ARE a project member — membership alone isn't enough without the manage_members permission/scope", () => {
+    const user = makeUser({ roles: ["administrative_staff"] });
+    expect(projectMembersInScope(["user_1"], user)).toBe(false);
+  });
+
+  it("denies finance_billing, which has unscoped READ but no membership-admin role", () => {
+    const user = makeUser({ roles: ["finance_billing"] });
+    expect(projectMembersInScope(["user_1"], user)).toBe(false);
+    expect(projectMembersInScope([], user)).toBe(false);
   });
 });
 
