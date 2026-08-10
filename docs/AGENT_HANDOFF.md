@@ -704,3 +704,26 @@ Workflow Engine (#10)
 WORKFLOW ENGINE IMPLEMENTATION:
 NOT STARTED IN THIS TASK
 ```
+
+---
+
+## Entry 19 — 2026-08-11 — Claude Code (Sonnet 5)
+
+**Role:** Deployment — explicit human instruction received (`vercel deploy --prod`, typed verbatim by the user) immediately after Entry 18's checkpoint report. This is the human-review/approval gate Entries 15-18 were all withholding deployment pending.
+
+**What happened:** Ran `vercel deploy --prod` from the local checkout at commit `98845a9` (Entry 18's checkpoint commit — no code changes since). Deployment `dpl_HSGSBrRK7FN7qRoFGjBcX3CNHUeG` built successfully, production alias (`point-view-operations-platform.vercel.app`) updated to point to it. Confirmed via `vercel inspect` (deployment created `2026-08-11 01:40:59 +08`) and a health check (`GET /` → 200, `GET /sign-in` → 200) immediately after.
+
+**Deployment provenance note:** same caveat as every prior entry — this was a CLI upload from this session's own local checkout (not a git-integration deploy), so there's no git-commit metadata attached to the deployment itself. Unlike the two earlier deploys documented in Entry 18 (whose provenance was inferred from timing correlation, run by someone else outside this agent's actions), this one is directly known: this agent ran it, from a verified-clean working tree at `98845a9`, immediately confirmed via `vercel inspect`.
+
+**What's now live:** everything through Entry 18 — the Projects vertical slice, the `projects:manage_members` RBAC correction, database-level integration test coverage for Projects/Leads/Clients/Users/Roles/page-authorization (137 tests), and the test-suite reliability fix. Still a **Controlled Prototype / Demo** commercially — this deployment does not change that status; see Entry 18's project-state markers, unchanged by this entry.
+
+**Deployment status:**
+```
+PRODUCTION DEPLOYMENT: EXECUTED
+Commit: 98845a9
+Deployment: dpl_HSGSBrRK7FN7qRoFGjBcX3CNHUeG
+Authorized by: explicit user instruction ("vercel deploy --prod")
+Health check: GET / -> 200, GET /sign-in -> 200
+```
+
+**Next task:** Same as Entry 18 — next business step is client prototype review (#8), then Core MVP scope finalization (#9), before Workflow Engine (#10) starts.
