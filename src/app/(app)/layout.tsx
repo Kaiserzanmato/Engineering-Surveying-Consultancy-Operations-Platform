@@ -39,6 +39,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               Clients
             </Link>
           )}
+          {user.permissions.has("projects:read") && (
+            <Link href="/projects" className="text-black/70 hover:text-black">
+              Projects
+            </Link>
+          )}
           {user.permissions.has("users:read") && (
             <Link href="/admin/users" className="text-black/70 hover:text-black">
               Users &amp; Roles

@@ -3,12 +3,12 @@ import { drizzle } from "drizzle-orm/neon-http";
 import * as schema from "../src/db/schema";
 
 // Seeds the fixed role catalog (PRD §12 — pending client validation before
-// production) and the permission set this identity/RBAC slice actually
-// enforces. Deliberately does NOT seed permissions for unbuilt features
-// (leads, clients, projects, billing, etc.) — per AGENTS.md Phase F, every
-// future slice adds its own permission rows and role grants when it ships,
-// rather than this script guessing at a shape for resources that don't
-// exist yet.
+// production) and the permission set each shipped slice actually enforces
+// (identity/RBAC, CRM/Intake, Projects). Deliberately does NOT seed
+// permissions for still-unbuilt features (billing, field ops, technical
+// tracking, review/approval, etc.) — per AGENTS.md Phase F, every future
+// slice adds its own permission rows and role grants when it ships, rather
+// than this script guessing at a shape for resources that don't exist yet.
 async function main() {
   const sql = neon(process.env.DATABASE_URL!);
   const db = drizzle(sql, { schema });
@@ -77,6 +77,16 @@ async function main() {
       key: "service_types:manage",
       description: "Manage the service catalog (used to classify leads/service requests).",
     },
+    {
+      key: "projects:read",
+      description:
+        "View project records. system_administrator/owner_gm/finance_billing are unscoped; administrative_staff and field_team_leader/survey_field_personnel/cad_technical_operator/technical_reviewer_approver are scoped to projects they're a ProjectMember of (resourceInScope check in src/app/projects/actions.ts and src/app/projects/[id]/page.tsx), per PRD §12's 'Assigned'/'Limited' access levels.",
+    },
+    {
+      key: "projects:manage",
+      description:
+        "Create/edit project records and manage the assigned-team roster. For administrative_staff this is enforced scoped to projects they're a ProjectMember of (same resourceInScope mechanism as projects:read) — everyone else granted this key (system_administrator, owner_gm) has unscoped access.",
+    },
   ];
 
   await db.insert(schema.roles).values(roles).onConflictDoNothing();
@@ -117,25 +127,38 @@ async function main() {
     { roleSlug: "system_administrator", permissionKey: "clients:read" },
     { roleSlug: "system_administrator", permissionKey: "clients:manage" },
     { roleSlug: "system_administrator", permissionKey: "service_types:manage" },
+    { roleSlug: "system_administrator", permissionKey: "projects:read" },
+    { roleSlug: "system_administrator", permissionKey: "projects:manage" },
 
     { roleSlug: "owner_gm", permissionKey: "leads:read" },
     { roleSlug: "owner_gm", permissionKey: "leads:manage" },
     { roleSlug: "owner_gm", permissionKey: "clients:read" },
     { roleSlug: "owner_gm", permissionKey: "clients:manage" },
     { roleSlug: "owner_gm", permissionKey: "service_types:manage" },
+    { roleSlug: "owner_gm", permissionKey: "projects:read" },
+    { roleSlug: "owner_gm", permissionKey: "projects:manage" },
 
     { roleSlug: "administrative_staff", permissionKey: "leads:read" },
     { roleSlug: "administrative_staff", permissionKey: "leads:manage" },
     { roleSlug: "administrative_staff", permissionKey: "clients:read" },
     { roleSlug: "administrative_staff", permissionKey: "clients:manage" },
+    { roleSlug: "administrative_staff", permissionKey: "projects:read" },
+    { roleSlug: "administrative_staff", permissionKey: "projects:manage" },
 
     { roleSlug: "finance_billing", permissionKey: "leads:read" },
     { roleSlug: "finance_billing", permissionKey: "clients:read" },
+    { roleSlug: "finance_billing", permissionKey: "projects:read" },
 
     { roleSlug: "sales_client_intake", permissionKey: "leads:read" },
     { roleSlug: "sales_client_intake", permissionKey: "leads:manage" },
     { roleSlug: "sales_client_intake", permissionKey: "clients:read" },
     { roleSlug: "sales_client_intake", permissionKey: "clients:manage" },
+    // No projects:* grant — "Pre-project" per PRD §12, see src/lib/projects.ts's judgment-call comment.
+
+    { roleSlug: "field_team_leader", permissionKey: "projects:read" },
+    { roleSlug: "survey_field_personnel", permissionKey: "projects:read" },
+    { roleSlug: "cad_technical_operator", permissionKey: "projects:read" },
+    { roleSlug: "technical_reviewer_approver", permissionKey: "projects:read" },
   ];
 
   await db.insert(schema.rolePermissions).values(grants).onConflictDoNothing();

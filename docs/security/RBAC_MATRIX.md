@@ -1,6 +1,6 @@
 # RBAC Matrix — Current Implementation State
 
-**Status:** 2026-08-09, after the identity/RBAC and CRM/Intake vertical slices. This tracks what's *actually enforced in code* — for the full target matrix Point View needs to validate before production, see `PRD.md` §12 (that table also covers Projects, Field Data, Master Repository, Technical Files, Billing, Audit, and System Settings, which still don't exist as features).
+**Status:** 2026-08-10, after the identity/RBAC, CRM/Intake, and Projects vertical slices. This tracks what's *actually enforced in code* — for the full target matrix Point View needs to validate before production, see `PRD.md` §12 (that table also covers Field Data, Master Repository, Technical Files, Billing, Audit, and System Settings, which still don't exist as features).
 
 Source of truth for roles: `src/db/schema.ts` `roleSlugEnum`. Source of truth for permissions and grants: `scripts/seed.ts` (re-run `bun run db:seed` after editing — it's idempotent, uses `onConflictDoNothing`).
 
@@ -20,7 +20,7 @@ Source of truth for roles: `src/db/schema.ts` `roleSlugEnum`. Source of truth fo
 
 ## Permissions currently enforced
 
-Identity/RBAC and CRM/Intake areas only — Projects, Field Data, Master Repository, Technical Files, Billing, Audit, and System Settings have **no permission keys yet** and therefore **no enforcement**, because those features don't exist. Do not read their absence here as "no access controls needed" — read it as "not built yet."
+Identity/RBAC, CRM/Intake, and Projects areas only — Field Data, Master Repository, Technical Files, Billing, Audit, and System Settings have **no permission keys yet** and therefore **no enforcement**, because those features don't exist. Do not read their absence here as "no access controls needed" — read it as "not built yet."
 
 | Permission key | Description | Granted to |
 |---|---|---|
@@ -32,13 +32,25 @@ Identity/RBAC and CRM/Intake areas only — Projects, Field Data, Master Reposit
 | `clients:read` | View clients and their contacts | `system_administrator`, `owner_gm`, `administrative_staff`, `finance_billing`, `sales_client_intake` |
 | `clients:manage` | Create/edit clients and contacts | `system_administrator`, `owner_gm`, `administrative_staff`, `sales_client_intake` |
 | `service_types:manage` | Manage the service catalog | `system_administrator`, `owner_gm` |
+| `projects:read` | View project records | `system_administrator`, `owner_gm`, `finance_billing` (all unscoped); `administrative_staff`, `field_team_leader`, `survey_field_personnel`, `cad_technical_operator`, `technical_reviewer_approver` (**scoped to projects they're a member of**, see below) |
+| `projects:manage` | Create/edit project records, manage the assigned-team roster | `system_administrator`, `owner_gm` (unscoped); `administrative_staff` (**scoped to projects they're a member of**, see below) |
 
-### Lead assignment scoping (the one resource-scoped permission so far)
+### Lead assignment scoping
 
-`administrative_staff` holding `leads:manage` is restricted to leads assigned to them (`src/lib/crm/leads.ts`'s `leadInScope`, enforced via `authorize()`'s `resourceInScope` hook — the first real exercise of that mechanism, previously unused since Projects don't exist yet). Concretely:
+`administrative_staff` holding `leads:manage` is restricted to leads assigned to them (`src/lib/crm/leads.ts`'s `leadInScope`, enforced via `authorize()`'s `resourceInScope` hook). Concretely:
 - They see only their assigned leads in `/crm/leads` (list query filters by `assignedTo`).
 - They can claim an unassigned lead (`claimLead`), but cannot reassign a lead to someone else — only unscoped roles (`system_administrator`, `owner_gm`, `sales_client_intake`) can reassign (`assignLead`).
 - Attempting to view or edit a lead assigned to someone else returns a 404 (matches the convention set in the identity/RBAC slice — `notFound()` rather than a 403, consistent with Clerk's own default for permission-gated routes).
+
+### Project membership scoping
+
+Projects introduces `ProjectMember` (`src/db/schema.ts`), a real many-to-many assignment mechanism the Leads/Clients slices didn't have — this is the first real exercise of `authorize()`'s `resourceInScope` hook against a genuine "resource in scope" check rather than a single-owner `assignedTo` field. Enforced via `src/lib/projects.ts`'s `projectInScope`:
+- `system_administrator`, `owner_gm`, `finance_billing` see/act on every project (`finance_billing` is read-only regardless — it never holds `projects:manage`).
+- `administrative_staff` sees and can edit only projects they're a `ProjectMember` of. On creation they're auto-added as a member (mirrors Leads' self-assign-on-create pattern) so they aren't immediately locked out of a project they just made.
+- `field_team_leader`, `survey_field_personnel`, `cad_technical_operator`, `technical_reviewer_approver` get **read-only** scoped access (membership-gated) — they do not hold `projects:manage` in this slice; editing the core project record isn't what PRD §17's per-role rows for Field Data/Technical Files/Review describe. Those roles will get real write actions through their own future permission areas (Field Operations, Technical Processing, Review/Approval slices), not through `projects:manage`.
+- `sales_client_intake` has no `projects:*` grant at all — PRD §12's "Pre-project" is read as no access to the Projects module; their involvement ends at Client creation (PRD §13's workflow).
+- Attempting to view or edit a project outside scope returns a 404, same convention as Leads.
+- Team-roster changes (`addProjectMember`/`removeProjectMember`) require the same `projects:manage` + in-scope check as editing the project record — a scoped `administrative_staff` member can add/remove other members on projects they're already on; they cannot add themselves to a project they're not on (no self-service "claim" exists for Projects the way `claimLead` exists for Leads, since project membership is assigned rather than pulled from an unowned queue).
 
 ## Interpretation notes (judgment calls made during this slice, flagged for client review)
 
@@ -47,9 +59,13 @@ Identity/RBAC and CRM/Intake areas only — Projects, Field Data, Master Reposit
 - No public self-service sign-up exists. Accounts are created by a System Administrator inviting a user (currently: via Clerk's own dashboard — no in-app invite flow yet, see Known limitations below) or by running `bun run db:bootstrap-admin -- <email>` for the very first admin.
 - PRD §12's CRM rows have several "Assigned"/"Limited"/"Full/Assigned" entries that aren't fully mechanical to scope yet (no client-assignment concept exists). Judgment calls made — see the comment block above `grants` in `scripts/seed.ts` for the full reasoning per role; summary: Finance's "Limited" read as read-only (consistent with the Users/Roles reading), Field/CAD/Reviewer's "Assigned" on Clients read as "No" for now (no mechanism to scope it correctly yet — granting unscoped access would be broader than the PRD intends), Admin Staff's "Full/Assigned" on Clients granted as full manage (no client-assignment table to scope against).
 - Point View's real service catalog (survey types, engineering services, etc.) isn't in any project document — `service_types` ships empty, populated via `/admin/service-types` by whoever has `service_types:manage`, not pre-seeded with invented names.
+- Point View's real project-numbering convention isn't in any project document either — `projects.projectNumber` ships as a required, unique, free-text field entered manually by whoever creates the project, not an invented auto-numbering scheme, same reasoning as `service_types`.
+- PRD §12's Projects row ("Admin=Full/Assigned", "Field/CAD/Reviewer=Assigned") is read differently than the identical-looking Clients row was: Clients had no assignment mechanism at slice-build time so "Full/Assigned" was granted as full unscoped manage; Projects introduces `ProjectMember`, so this slice reads it literally — Admin Staff genuinely scoped to assigned projects, Field/CAD/Reviewer genuinely scoped read-only. If the client's intent was actually unscoped for these roles too, that's a one-file change (`src/lib/projects.ts`'s role sets + `scripts/seed.ts`'s grants).
+- PRD §12's "Pre-project" (Sales, Projects row) has no defined meaning elsewhere in the PRD — read as "no access to the Projects module," flagged for client confirmation like every other ambiguous matrix cell here.
 
 ## Known limitations / near-term follow-ups
 
 - No in-app "invite user" flow — inviting a new user currently requires the Clerk dashboard. Building this (calling Clerk's Backend API to send an invitation, itself gated by `users:manage_roles` or a new `users:invite` permission) is a reasonable next addition to this slice.
-- `resourceInScope` (project-level authorization from `TECHNICAL_ARCHITECTURE.md` §5.3) has no real caller yet — there are no project-scoped resources until the Projects slice ships. The hook exists in `src/lib/auth/authorize.ts` but is unexercised.
 - MFA enforcement (`src/lib/auth/mfa.ts`) is built to gate System Administrator specifically, but is currently **disabled** (`MFA_ENFORCEMENT_ENABLED = false`) because Clerk's Hobby plan doesn't offer any MFA strategy — confirmed 2026-08-09. A non-blocking banner on `/dashboard` nudges instead. This is a tracked pre-production gap (`docs/security/THREAT_MODEL.md` §5 gap 5), not a design decision to skip MFA. PRD §8 "strongly recommends" MFA for other privileged roles too (not mandatory) — no enforcement or nudge built for them yet either way.
+- Projects has no in-app member picker beyond a plain `<select>` of every active user's name/email (`src/app/projects/[id]/page.tsx`) — fine at current scale, would need search/pagination if the user directory grows large.
+- No project deletion/archival path exists yet — a project, once created, stays in the list indefinitely (status can be set to `completed`, but there's no soft-delete or archive concept). Not a PRD requirement either way; flagging as a plausible near-term ask.

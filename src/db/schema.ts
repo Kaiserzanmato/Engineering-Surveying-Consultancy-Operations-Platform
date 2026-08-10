@@ -254,3 +254,97 @@ export const clientsRelations = relations(clients, ({ one, many }) => ({
 export const contactsRelations = relations(contacts, ({ one }) => ({
   client: one(clients, { fields: [contacts.clientId], references: [clients.id] }),
 }));
+
+// ---------------------------------------------------------------------------
+// Projects — PRD §17 Project Management, §18 data model (Project,
+// ProjectMember), §13 workflow (Client -> Project -> Service Workflow).
+// P1 item 3 per docs/IMPLEMENTATION_PLAN.md. Deliberately scoped to the
+// project record itself only — Workflow Engine (templates/stages/
+// dependencies/checklists), Field Operations, Technical Processing,
+// Review/Approval, and Billing are later slices (P1 items 4-9) that will
+// attach to this table, not rebuild it. "Current stage" and "Blocker" are
+// therefore plain fields here, not driven by a workflow-stage FK yet.
+// ---------------------------------------------------------------------------
+
+// Matches the exact 5 states named for the Dashboard in the Core MVP
+// baseline ("Active, completed, delayed, pending, and not-started
+// projects") — not invented. No fixed transition graph is enforced (unlike
+// leadStatusEnum's canTransitionLeadStatus): nothing in PRD/TECHNICAL_
+// ARCHITECTURE specifies project-status transition rules, and the real
+// stage-gated progression belongs to the Workflow Engine slice, not this one.
+export const projectStatusEnum = pgEnum("project_status", [
+  "not_started",
+  "pending",
+  "active",
+  "delayed",
+  "completed",
+]);
+
+export const projects = pgTable("projects", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  // Point View's real project-numbering convention isn't specified anywhere
+  // in the project docs (same situation as serviceTypes — see that table's
+  // comment). Ships as a required, unique, free-text field a project
+  // creator enters manually rather than an invented auto-numbering scheme
+  // (e.g. "PV-2026-001") that could conflict with their actual convention.
+  projectNumber: text("project_number").notNull().unique(),
+  clientId: uuid("client_id")
+    .notNull()
+    .references(() => clients.id, { onDelete: "restrict" }),
+  serviceTypeId: uuid("service_type_id").references(() => serviceTypes.id, {
+    onDelete: "set null",
+  }),
+  // Free text, same precedent as leads.location — PRD §17 lists "Locations"
+  // under CRM but it isn't a separate §18 data-model entity, and no formal
+  // Location entity exists yet (see docs/security/RBAC_MATRIX.md's CRM notes).
+  location: text("location"),
+  status: projectStatusEnum("status").notNull().default("not_started"),
+  // Plain text, not a workflow-stage FK — see file-level comment above.
+  currentStage: text("current_stage"),
+  blocker: text("blocker"),
+  startDate: timestamp("start_date", { withTimezone: true }),
+  targetEndDate: timestamp("target_end_date", { withTimezone: true }),
+  actualEndDate: timestamp("actual_end_date", { withTimezone: true }),
+  // Plain text status label, not a FK into a BillingRecord table — Billing
+  // (P1 item 9) is a later slice; this is a placeholder operational field
+  // only, matching PRD §17 Project Management's "Billing status" line item.
+  billingStatus: text("billing_status"),
+  createdBy: text("created_by")
+    .notNull()
+    .references(() => users.id, { onDelete: "restrict" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// PRD §18 "ProjectMember" — the assigned-team roster. Composite PK mirrors
+// userRoles' pattern (no separate id needed for a pure membership row).
+export const projectMembers = pgTable(
+  "project_members",
+  {
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    addedAt: timestamp("added_at", { withTimezone: true }).notNull().defaultNow(),
+    addedBy: text("added_by").references(() => users.id, { onDelete: "set null" }),
+  },
+  (t) => [primaryKey({ columns: [t.projectId, t.userId] })],
+);
+
+export const projectsRelations = relations(projects, ({ one, many }) => ({
+  client: one(clients, { fields: [projects.clientId], references: [clients.id] }),
+  serviceType: one(serviceTypes, {
+    fields: [projects.serviceTypeId],
+    references: [serviceTypes.id],
+  }),
+  createdByUser: one(users, { fields: [projects.createdBy], references: [users.id] }),
+  members: many(projectMembers),
+}));
+
+export const projectMembersRelations = relations(projectMembers, ({ one }) => ({
+  project: one(projects, { fields: [projectMembers.projectId], references: [projects.id] }),
+  user: one(users, { fields: [projectMembers.userId], references: [users.id] }),
+  addedByUser: one(users, { fields: [projectMembers.addedBy], references: [users.id] }),
+}));

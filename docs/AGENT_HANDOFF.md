@@ -427,3 +427,34 @@ Built `src/lib/countries.ts` (full ISO 3166-1 English short-name list, public st
 **Device/browser impact:** Not yet re-verified by the user in a real browser. Recommend: retry the exact case from their bug report (Cavite -> Imus, confirm barangays now populate and ZIP auto-fills to 4103), then try Cavite -> Dasmariñas specifically to confirm it's absent from the dropdown but the manual-entry toggle lets them enter it anyway.
 
 **Next task:** User verification of this fix (especially the originally-reported Imus case). Then Projects (P1 item 3), same as prior entries' next-task note.
+
+---
+
+## Entry 14 — 2026-08-10 — Claude Code (Sonnet 5)
+
+**Role:** Builder (Projects vertical slice, P1 item 3)
+
+**Objective:** Client (Point View) asked for a status check against the original Core MVP proposal ahead of the 2026-08-13 scope meeting; the deployed build was found to have Identity/RBAC + CRM/Intake shipped but no Projects entity at all — the next item in this file's own plan. Built it.
+
+**What shipped:** `projects` table (project number, client, service type, location, status, current stage, blocker, start/target/actual dates, billing-status placeholder) + `project_members` join table (PRD §18's `ProjectMember`) — schema, migration (`drizzle/0005_clever_stick.sql`, purely additive: 2 new tables + 1 new enum, no changes to existing tables), `src/lib/projects.ts` (status parsing + scoping helpers), server actions (`createProject`, `updateProject`, `addProjectMember`, `removeProjectMember`), `/projects` list page (with scoped create form) and `/projects/[id]` detail page (edit form + team roster), nav link, seed permissions/grants.
+
+**Scoping decision (the one worth flagging closely):** PRD §12's Projects row and Clients row both say "Admin=Full/Assigned" — but they were resolved *differently*. Clients (built first) had no assignment mechanism to scope against, so "Full/Assigned" was granted as full unscoped manage. Projects introduces `ProjectMember`, a real mechanism, so this slice reads "Full/Assigned" literally: `administrative_staff` is scoped to projects they're a member of (mirrors `leadInScope`/Lead assignment exactly), auto-added as a member on creation so they aren't locked out of what they just made. Field Team Leader/Survey-Field Personnel/CAD Operator/Technical Reviewer get scoped **read-only** (no `projects:manage` yet — their real write actions belong to their own future slices: Field Operations, Technical Processing, Review/Approval). Finance gets unscoped read (billing needs cross-project visibility). Sales gets no access at all ("Pre-project" read as: their involvement ends at Client creation per PRD §13). All flagged in `docs/security/RBAC_MATRIX.md`'s Interpretation notes for client validation, same practice as every prior ambiguous PRD cell.
+
+**A real bug caught before it shipped:** first draft of `removeProjectMember` used `eq(a) && eq(b)` as a Drizzle `where()` condition instead of `and(eq(a), eq(b))` — in JS, `&&` on two truthy objects just evaluates to the second operand, so the query would have silently filtered by `userId` alone and deleted that user's membership from **every** project, not just the one specified. Caught on re-reading the action before running it, not by a test (no test covers this path — see Unresolved risk below). Fixed to `and(...)`.
+
+**Files changed:** `src/db/schema.ts` (projects, projectMembers tables + relations), `drizzle/0005_clever_stick.sql` (new), `src/lib/projects.ts` (new), `src/lib/projects.test.ts` (new, 12 tests), `src/app/(app)/projects/actions.ts` (new), `src/app/(app)/projects/page.tsx` (new), `src/app/(app)/projects/[id]/page.tsx` (new), `src/app/(app)/layout.tsx` (nav link), `scripts/seed.ts` (2 new permissions, 9 new grants, updated header comment), `docs/security/RBAC_MATRIX.md`, `docs/IMPLEMENTATION_PLAN.md`.
+
+**Tests:** `bun run lint`, `bunx next typegen && bunx tsc --noEmit`, `bun run test` (58/58, up from 46), `rm -rf .next && bun run build` — all clean. Migration applied against the dev database (`bun run db:migrate`) and seed re-run (idempotent, `bun run db:seed` — 10 permissions/35 grants, up from 8/21). **Not yet done:** no server action has been exercised against real data in a browser — this is unit-tested + build-verified only, same starting point Entry 6 (CRM slice) was at before its own round of user-reported bugs (idempotency, button state, address structure). Expect a similar follow-up cycle once the user clicks through it.
+
+**Privacy/security impact:** New personal data surface: `ProjectMember` links users to projects (who's on what project — operationally necessary, not excess collection). `projects` table has no new sensitive-data classification beyond what `clients`/`leads` already carry (project number, location, dates, billing-status text — no new category of personal data). Server-side authorization follows the established single-gate pattern (`authorize()` + `resourceInScope`) — no route reads `projects:*` state without going through it. `billingStatus` is free text with no validation, same posture as other free-text operational fields elsewhere in the app.
+
+**Unresolved risk / known limitations:**
+- Not yet verified by the user in a real browser (see Tests above) — recommend: sign in as an unscoped role (System Administrator or Owner/GM) first to create a project and confirm the client/service-type dropdowns populate correctly, then (if a second test account with `administrative_staff` exists) confirm that role only sees projects it's a member of.
+- No test directly exercises `removeProjectMember`'s SQL `where()` clause end-to-end (the bug described above was caught by inspection, not by a failing test) — a integration-level test against a real/test DB would close this gap; none of this repo's current tests hit the database (all are pure-function unit tests), so this is a pre-existing gap in the test strategy, not one newly introduced here.
+- `billingStatus`/`currentStage`/`blocker` are unvalidated free text — intentional for now (see IMPLEMENTATION_PLAN.md's note that Workflow/Billing slices will formalize these), but worth knowing if the client expects structure here already.
+- Project member picker has no search/pagination (plain `<select>` over all active users) — fine at current user-base size, called out in RBAC_MATRIX.md's Known limitations.
+- Everything carried over from Entry 13 unchanged (PH address handling, Dasmariñas gap, MFA disabled pending Clerk Pro decision).
+
+**Device/browser impact:** Not yet verified — same caveat as Tests above.
+
+**Next task:** User verification of the Projects slice in a real browser (create a project, confirm client/service dropdowns, confirm scoped-role visibility if a second test account exists). Then Workflow engine (P1 item 4) — templates, stages, dependencies, checklists, approval gates, per `docs/IMPLEMENTATION_PLAN.md` §2.
