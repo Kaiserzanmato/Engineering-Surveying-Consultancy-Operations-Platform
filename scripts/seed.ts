@@ -1,5 +1,6 @@
 import { neon } from "@neondatabase/serverless";
 import { drizzle } from "drizzle-orm/neon-http";
+import { fileURLToPath } from "node:url";
 import * as schema from "../src/db/schema";
 
 // Seeds the fixed role catalog (PRD §12 — pending client validation before
@@ -9,11 +10,13 @@ import * as schema from "../src/db/schema";
 // tracking, review/approval, etc.) — per AGENTS.md Phase F, every future
 // slice adds its own permission rows and role grants when it ships, rather
 // than this script guessing at a shape for resources that don't exist yet.
-async function main() {
-  const sql = neon(process.env.DATABASE_URL!);
-  const db = drizzle(sql, { schema });
-
-  const roles: (typeof schema.roles.$inferInsert)[] = [
+//
+// roles/permissions/grants are exported (not just local to main()) so
+// test/db-test-utils.ts's integration-test database can seed the exact
+// same RBAC data this script applies to real environments — one source of
+// truth, not a hand-maintained fixture that can drift from what production
+// actually grants.
+export const roles: (typeof schema.roles.$inferInsert)[] = [
     {
       slug: "system_administrator",
       name: "System Administrator",
@@ -59,9 +62,9 @@ async function main() {
       name: "Sales / Client Intake",
       description: "Manages leads and initial client intake.",
     },
-  ];
+];
 
-  const permissions: (typeof schema.permissions.$inferInsert)[] = [
+export const permissions: (typeof schema.permissions.$inferInsert)[] = [
     { key: "users:read", description: "View the user list and their assigned roles." },
     { key: "users:manage_roles", description: "Assign or revoke roles for a user." },
     { key: "users:suspend", description: "Suspend or reactivate a user account." },
@@ -92,36 +95,33 @@ async function main() {
       description:
         "Add/remove ProjectMember rows (the assigned-team roster) — deliberately separate from projects:manage (RBAC review 2026-08-10): changing membership changes who is authorized to read/edit a project at all, so it's a narrower, independently-granted permission. Currently granted only to system_administrator/owner_gm (unscoped) — administrative_staff holds projects:manage but NOT this key, so a scoped project member can edit the project record but cannot alter who else is on it, per PRD §12's Projects row read literally now that ProjectMember gives a real mechanism to scope against (see src/lib/projects.ts's file-level comment).",
     },
-  ];
+];
 
-  await db.insert(schema.roles).values(roles).onConflictDoNothing();
-  await db.insert(schema.permissions).values(permissions).onConflictDoNothing();
-
-  // PRD §12 Baseline Matrix: "Users/Roles: SysAdmin=Full, Owner/GM=Limited,
-  // everyone else=No." "Limited" is not further specified by the PRD, so
-  // this seed makes a conservative reading: Owner/GM can see the user list
-  // (visibility) but cannot grant roles or suspend accounts (that stays
-  // System-Administrator-only) — role/account changes are called out as
-  // high-risk actions in PRD §8, and self-escalation risk argues for the
-  // narrower reading until the client confirms otherwise (PRD §12: "Final
-  // permissions require client validation before production").
-  // PRD §12 CRM rows: "Leads: SysAdmin=Full, Owner/GM=Full, Admin=Assigned,
-  // Field/CAD/Reviewer=No, Finance=Limited, Sales=Full." "Clients:
-  // SysAdmin=Full, Owner/GM=Full, Admin=Full/Assigned, Field/CAD/Reviewer=
-  // Assigned, Finance=Limited, Sales=Assigned." Judgment calls made here
-  // (flag for client validation per PRD §12):
-  // - "Limited" (Finance) read as leads:read/clients:read only, no manage —
-  //   consistent with the Users/Roles "Limited" reading above.
-  // - Field/CAD/Reviewer's "Assigned" on Clients has no assignment
-  //   mechanism to scope against yet (no client-membership concept exists),
-  //   so it's read as "No" for now rather than granting unscoped access —
-  //   revisit once Projects/assignment exists and can properly scope this.
-  // - Admin Staff's "Assigned" on Leads IS scoped (assignedTo check in the
-  //   server action); Clients' "Full/Assigned" is granted as full manage
-  //   since there's no client-assignment table to scope against either.
-  // - Sales' "Assigned" on Clients is granted as full manage — they're the
-  //   role that converts leads into clients, so needs real create/update power.
-  const grants: (typeof schema.rolePermissions.$inferInsert)[] = [
+// PRD §12 Baseline Matrix: "Users/Roles: SysAdmin=Full, Owner/GM=Limited,
+// everyone else=No." "Limited" is not further specified by the PRD, so
+// this seed makes a conservative reading: Owner/GM can see the user list
+// (visibility) but cannot grant roles or suspend accounts (that stays
+// System-Administrator-only) — role/account changes are called out as
+// high-risk actions in PRD §8, and self-escalation risk argues for the
+// narrower reading until the client confirms otherwise (PRD §12: "Final
+// permissions require client validation before production").
+// PRD §12 CRM rows: "Leads: SysAdmin=Full, Owner/GM=Full, Admin=Assigned,
+// Field/CAD/Reviewer=No, Finance=Limited, Sales=Full." "Clients:
+// SysAdmin=Full, Owner/GM=Full, Admin=Full/Assigned, Field/CAD/Reviewer=
+// Assigned, Finance=Limited, Sales=Assigned." Judgment calls made here
+// (flag for client validation per PRD §12):
+// - "Limited" (Finance) read as leads:read/clients:read only, no manage —
+//   consistent with the Users/Roles "Limited" reading above.
+// - Field/CAD/Reviewer's "Assigned" on Clients has no assignment
+//   mechanism to scope against yet (no client-membership concept exists),
+//   so it's read as "No" for now rather than granting unscoped access —
+//   revisit once Projects/assignment exists and can properly scope this.
+// - Admin Staff's "Assigned" on Leads IS scoped (assignedTo check in the
+//   server action); Clients' "Full/Assigned" is granted as full manage
+//   since there's no client-assignment table to scope against either.
+// - Sales' "Assigned" on Clients is granted as full manage — they're the
+//   role that converts leads into clients, so needs real create/update power.
+export const grants: (typeof schema.rolePermissions.$inferInsert)[] = [
     { roleSlug: "system_administrator", permissionKey: "users:read" },
     { roleSlug: "system_administrator", permissionKey: "users:manage_roles" },
     { roleSlug: "system_administrator", permissionKey: "users:suspend" },
@@ -170,15 +170,29 @@ async function main() {
     { roleSlug: "field_team_leader", permissionKey: "projects:read" },
     { roleSlug: "survey_field_personnel", permissionKey: "projects:read" },
     { roleSlug: "cad_technical_operator", permissionKey: "projects:read" },
-    { roleSlug: "technical_reviewer_approver", permissionKey: "projects:read" },
-  ];
+  { roleSlug: "technical_reviewer_approver", permissionKey: "projects:read" },
+];
 
+async function main() {
+  const sql = neon(process.env.DATABASE_URL!);
+  const db = drizzle(sql, { schema });
+
+  await db.insert(schema.roles).values(roles).onConflictDoNothing();
+  await db.insert(schema.permissions).values(permissions).onConflictDoNothing();
   await db.insert(schema.rolePermissions).values(grants).onConflictDoNothing();
 
   console.log(`Seeded ${roles.length} roles, ${permissions.length} permissions, ${grants.length} grants.`);
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+// Only run main() when this file is executed directly (bun run db:seed,
+// which shells out to `tsx scripts/seed.ts`), not when imported for its
+// exported data (e.g. by test/db-test-utils.ts under vitest). tsx runs on
+// Node, not Bun, so this uses the standard Node "is this the entry module"
+// idiom rather than Bun-only import.meta.main.
+const isMainModule = process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1];
+if (isMainModule) {
+  main().catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
+}
