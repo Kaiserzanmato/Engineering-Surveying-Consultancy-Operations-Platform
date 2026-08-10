@@ -576,3 +576,131 @@ STATUS: Awaiting human review.
 ```
 
 **Next task:** Awaiting human review of this pass, same standing questions as Entry 15/16 (Administrative Staff `projects:manage_members`, Sales "Pre-project," VTA, Client-assignment model, MFA/Clerk Pro). Workflow Engine (P1 item 4) is next per `docs/IMPLEMENTATION_PLAN.md` once review clears.
+
+---
+
+## Entry 18 — 2026-08-11 — Claude Code (Sonnet 5) — CHECKPOINT
+
+**Role:** Checkpoint/reconciliation pass — executed from a written user instruction (`CONTROLLED_PROTOTYPE_CHECKPOINT_AND_GITHUB_TRACKING_RECONCILIATION.md`) to verify the live deployment, smoke-test the prototype, re-run the local baseline, reconcile documentation, and record the current GitHub Project state so any future session (this repo now has three coding-agent audiences per `AGENTS.md` — Claude Code, Codex, Antigravity) can immediately orient. **No implementation work was done in this entry** — explicitly a checkpoint, not a feature pass. Workflow Engine was not started, per explicit instruction.
+
+### A. Deployed commit
+
+- **Repository HEAD at time of check:** `aec9d68` (`main`, clean working tree).
+- **Vercel production alias** (`point-view-operations-platform.vercel.app`) resolves to deployment `dpl_FYP8sV1zpHkMbNZjZntbjTNviCMP`, created `2026-08-11 00:43:51 +08` — **13 seconds after** commit `aec9d68` landed locally (`00:43:38`). The deployment immediately prior (`00:27:09`) sits 12 seconds after the previous commit, `1d459a8` (`00:26:57`). That's a consistent pattern across the last two deploys, not a one-off coincidence.
+- **Caveat, stated plainly rather than glossed over:** these are CLI-uploaded deployments (`vercel deploy --prod`), not Git-integration deployments — `vercel inspect`'s `gitSource`/`meta` fields are `null`, so there is no cryptographic proof of exactly which commit's working tree was uploaded. The timing correlation is strong circumstantial evidence, not proof. Neither this session nor any earlier one in this conversation ran `vercel deploy` — production deployment has been explicitly withheld throughout (see Entries 15-17's "NOT EXECUTED" markers) — so whoever ran these two deploys did so outside this agent's actions, most plausibly the user, from the same local checkout, immediately after observing each push.
+- Deployed route set matches the current repository exactly: `/`, `/sign-in`, `/account/security`, `/dashboard`, `/admin/users`, `/admin/service-types`, `/crm/leads`, `/crm/leads/[id]`, `/crm/clients`, `/crm/clients/[id]`, `/projects`, `/projects/[id]`, `/api/webhooks/clerk`, plus `_middleware`/`_not-found`/`_global-error`. No unexpected routes, none missing.
+
+### B. Live URL / smoke test
+
+**Live URL:** `https://point-view-operations-platform.vercel.app`
+
+**Verified (unauthenticated, non-destructive — no login credentials or connected browser session were available this session):**
+- `/sign-in` → 200, real Clerk sign-in UI.
+- `/dashboard`, `/admin/users`, `/crm/leads`, `/crm/clients`, `/projects` (all protected routes) → each redirects to `/?unavailable=1`, the "account isn't set up / suspended, contact a System Administrator" gate — correct, matches `src/app/(app)/layout.tsx`'s `redirect()` for a session with no synced local user row.
+- A guessed/nonexistent resource ID (`/projects/00000000-0000-0000-0000-000000000000`) → same gate, correctly denied before any project data would be reachable.
+
+**NOT verified this session, stated explicitly rather than silently skipped:** authentication as a real user, dashboard content, Users/RBAC actions, Leads/Clients/Projects CRUD, and Project membership behavior all require a logged-in session. No credentials were provided (and per this agent's own standing policy, entering a password into any field is prohibited regardless), and the Chrome browser-automation extension was not connected this session (`tabs_context_mcp` returned "Browser extension is not connected"). This is a real gap in this checkpoint, not a pass — flagged under Known Open Risks below. The database-level integration test suite (Entries 16-17, 137 tests) exercises the equivalent authorization logic directly against real server actions/pages, which is a legitimate substitute for *authorization-logic* confidence, but is not the same as confirming the *deployed, running* instance behaves the same way end-to-end through a real browser session.
+
+### C. Local verification baseline
+
+```
+lint: clean
+typecheck: clean (bunx next typegen && bunx tsc --noEmit)
+tests: 137/137 passing — same count as the prior baseline, but see note below
+production build: clean, same 13 routes
+```
+
+**One real issue found and fixed during this pass, not silently worked around:** running the full suite together (first time all 5 `*.integration.test.ts` files plus the pre-existing `ph-address.test.ts` broad sweep ran concurrently under load) produced intermittent timeouts — first a pure-unit test (`ph-address.test.ts`'s ~1,600-municipality sweep) exceeded the default 5s `testTimeout`, then, after giving that test more room, an integration file's `beforeAll` exceeded even the 30s `hookTimeout` Entry 16 had already raised. Root cause: 5 concurrent PGlite (WASM Postgres) instances booting under CPU contention, not a logic bug in any test. Fixed properly rather than by further raising numbers: `vitest.config.ts` now sets `fileParallelism: false` (only one PGlite instance ever boots at a time) — confirmed stable across 3 consecutive full-suite runs after the fix. `TESTING.md` updated to describe the actual current config and why.
+
+### D. Documentation reconciled
+
+- `docs/IMPLEMENTATION_PLAN.md` — corrected a stale claim under the Projects entry that integration testing was "still the only slice with the latter, not yet a repo-wide pattern" — false as of Entry 17; now points at all four covered areas.
+- `TESTING.md` — updated the "Known limitation" paragraph to describe the actual current `vitest.config.ts` (`fileParallelism: false` + `hookTimeout: 20_000`), not the superseded hookTimeout-only approach from Entry 16.
+- `docs/security/RBAC_MATRIX.md` — checked, already accurate as of Entry 17 (its Test coverage table already lists Projects/Leads/Clients/Users + page-authorization); no change needed.
+- `docs/AGENT_HANDOFF.md` — this entry.
+- Checked for language overstating engagement status ("final production," "completed client system," etc.) across every canonical doc — none found. No corrective edits needed there; this entry's own project-state markers (below) exist so that stays true going forward.
+
+### E. GitHub Project checkpoint
+
+This repository's GitHub issue tracker (`Kaiserzanmato/Engineering-Surveying-Consultancy-Operations-Platform`) is the authoritative source for outstanding work — cross-check it directly (`gh issue list`) rather than relying only on this file, which can lag. As of this entry:
+
+**Closed (done):**
+- `#1` Identity & RBAC Foundation
+- `#2` CRM / Leads / Client Management
+- `#3` Project Management & ProjectMember RBAC
+- `#4` Database-Level RBAC Integration Test Coverage
+- `#5` Page / Route Authorization Testing
+- `#6` Controlled Prototype Baseline
+
+**Open — Core MVP remaining implementation work (`#10`–`#18`):** `#10` Workflow Engine, `#11` Field Operations, `#12` Private Document & Photo Repository, `#13` Technical Processing, `#14` Review / Approval Workflow, `#15` Billing Tracking, `#16` Management Dashboard, `#17` Notifications & Escalations, `#18` Audit / Privacy / Retention.
+
+**Open — Security / QA / Release readiness (`#19`–`#25`):** `#19` Rate Limiting & Abuse Protection, `#20` MFA / Privileged Account Security, `#21` Cross-Browser & Device Testing, `#22` Accessibility / WCAG Review, `#23` Backup / Restore Validation, `#24` UAT & Regression Testing, `#25` Final Release Readiness.
+
+**Open — Needs Client Validation, do NOT treat as confirmed requirements (`#26`–`#30`):** `#26` Advanced Versioned Configuration & Rules Governance, `#27` Final RBAC / Role Boundaries, `#28` Workflow Branch Rules H-U / H-T-D / H-T-L, `#29` Billing Milestone Rules, `#30` Requirement / Obligation / Tier Rules.
+
+**Open — Additional/parked scope, separate from Core MVP baseline (`#31`):** `#31` DENR LAMS Integration — ₱250k additional, not part of the original Core MVP unless separately commissioned.
+
+**Open — Future feasibility, not to be pulled into Core MVP without separate approval (`#32`–`#40`):** `#32` Direct GA Survey Integration, `#33` Deeper AutoCAD Automation, `#34` GA Survey → AutoCAD Transfer, `#35` Advanced Image-to-Survey Processing, `#36` Automated DWG Generation, `#37` Computer-Vision Survey Automation, `#38` External Autonomous AI Agents, `#39` SaaS Commercialization, `#40` White-Label / Resale.
+
+**Open — verified but not closed this entry:** `#7` Vercel Controlled Prototype / Demo Verification. Section B above documents the evidence (deployment matches reviewed commit with high confidence, route set matches, unauthenticated protected-route/denial behavior confirmed correct) — **this issue looks ready to be marked complete**, but closing it is a GitHub state change this entry did not make; that's a call for the user, especially given the authenticated-flow smoke-test gap noted in Section B. `#8` (Point View Prototype Review & Requirements Validation) and `#9` (Finalize Core MVP Scope & Acceptance Criteria) **must remain open** — they require actual client/business validation, not something a coding agent can complete by writing code or tests.
+
+### Current project state (read this first, future agent)
+
+```
+CURRENT PROJECT STATE:
+Controlled Prototype / Demo
+
+  Technical hosting state: deployed on Vercel's Production environment
+  (a hosting-tier label — the app is live and reachable) — this is NOT
+  the same as commercial/acceptance state, which remains a controlled
+  prototype pending client review. Do not conflate the two.
+
+FINAL PROPOSAL / SOW:
+Not yet finalized — see the Scope Alignment assessment
+("Scope Alignment & Change Assessment...md" in the user's Downloads,
+referenced earlier this conversation) and PRD.md/TECHNICAL_ARCHITECTURE.md
+for the working baseline. ₱400,000 Core MVP is the recommended
+commercial baseline, not yet client-confirmed.
+
+NEXT BUSINESS STEP:
+Client prototype review and requirements validation (#8)
+
+NEXT SCOPE ACTION:
+Finalize Core MVP scope and acceptance criteria (#9)
+
+NEXT ENGINEERING SLICE AFTER SCOPE CONFIRMATION:
+Workflow Engine (#10) — do not start before #8/#9 clear scope
+confirmation with the client. Building ahead on unresolved workflow
+rules (H-U/H-T-D/H-T-L branch rules, requirement/obligation/tier rules,
+billing milestone rules — see #28/#29/#30, all "Needs Client Validation")
+risks building the wrong thing.
+```
+
+### Known open risks (current, not exhaustive history)
+
+- **Authenticated smoke test not performed this entry** — see Section B. The live deployment's authorization behavior is inferred from (a) matching the reviewed commit with high confidence and (b) that commit's 137 passing integration tests, not from directly exercising the live instance as a signed-in user. Recommend closing this gap before treating `#7` as fully closed, or accepting the inference as sufficient — that's a judgment call for the user, not made unilaterally here.
+- **Deployment provenance isn't cryptographically verifiable** — CLI deploys carry no git metadata. If deployment discipline matters going forward (e.g. before any client-facing demo), connecting the Vercel project to GitHub (git-integration deploys) would close this gap permanently; not done here as it wasn't requested and is a standing-configuration change, not a checkpoint action.
+- All standing open decisions from Entries 15-17 remain open and are NOT resolved by this checkpoint: Administrative Staff `projects:manage_members`, Sales "Pre-project" meaning, VTA role/permission model, Client-assignment/`ClientMember` scoping, MFA (blocked on a Clerk plan decision), rate limiting (`#19`, real gap — `/api/webhooks/clerk` and `/sign-in` are the nearest-term unauthenticated exposure per `docs/security/THREAT_MODEL.md`).
+- No accessibility, cross-browser/device, or backup/restore validation has been performed (`#21`-`#23`, all open, zero automated coverage exists for any of them).
+- `docs/release/RELEASE_EVIDENCE.md` still does not exist — this prototype is not close to the state that document would describe; do not create a partial one prematurely (per Entry 17's same reasoning, still true).
+
+**Deployment status:**
+```
+PRODUCTION DEPLOYMENT: NOT EXECUTED (this entry)
+STATUS: Awaiting human review.
+```
+
+**Next task:**
+```
+NEXT BUSINESS ACTION:
+Point View prototype review and requirements validation (#8)
+
+NEXT SCOPE ACTION:
+Finalize Core MVP scope and acceptance criteria (#9)
+
+NEXT ENGINEERING SLICE AFTER SCOPE CONFIRMATION:
+Workflow Engine (#10)
+
+WORKFLOW ENGINE IMPLEMENTATION:
+NOT STARTED IN THIS TASK
+```

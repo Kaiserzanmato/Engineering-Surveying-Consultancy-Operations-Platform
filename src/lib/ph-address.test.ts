@@ -34,13 +34,22 @@ describe("ph-address (real province/city/barangay + postal data, not invented)",
     }
   });
 
-  it("has no province/city with zero barangays anywhere among listed entries (broad sanity check; does not catch entries missing entirely, like Dasmariñas)", () => {
-    for (const province of getPhProvinces()) {
-      for (const city of getPhMunicipalities(province)) {
-        expect(getPhBarangays(province, city).length).toBeGreaterThan(0);
+  it(
+    "has no province/city with zero barangays anywhere among listed entries (broad sanity check; does not catch entries missing entirely, like Dasmariñas)",
+    () => {
+      for (const province of getPhProvinces()) {
+        for (const city of getPhMunicipalities(province)) {
+          expect(getPhBarangays(province, city).length).toBeGreaterThan(0);
+        }
       }
-    }
-  });
+    },
+    // Sweeps ~1,600 municipalities — passes in ~1s alone, but the default
+    // 5s testTimeout can be exceeded under CPU contention now that several
+    // *.integration.test.ts files (each booting a PGlite instance) run in
+    // parallel alongside it (observed 2026-08-11 running the full suite
+    // together, not a regression in this test's own logic).
+    15_000,
+  );
 
   it("auto-fills Kawit's real postal code (4104)", () => {
     expect(getPhPostalCode("Kawit")).toBe("4104");
